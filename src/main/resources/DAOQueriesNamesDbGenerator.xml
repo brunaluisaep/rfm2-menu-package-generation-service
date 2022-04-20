@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+    <getLocalizationSets>
+        <![CDATA[   SELECT pren_set_id,
+                           cusm_set_id
+                    FROM REST_DATA
+                    WHERE REST_ID = :restId
+                      AND REST_INST_ID = :restInstId
+                      AND asn_set_typ = 6015
+                      AND dltd_fl = 0]]>
+    </getLocalizationSets>
+
+    <getCountryCode>
+        <![CDATA[   SELECT COALESCE(RL2.CTRY_ID, RL1.CTRY_ID) country_id
+                    FROM rest_lclz_info RL1
+                             LEFT OUTER JOIN rest_lclz_info rl2
+                                             ON RL2.set_id = :childSetId
+                                                 AND :effectiveDate BETWEEN rl2.strt_dt AND rl2.end_dt
+                                                 AND COALESCE(RL2.DLTD_FL, 0) = 0
+                    WHERE RL1.set_id = :parentSetId
+                      AND :effectiveDate BETWEEN rl1.strt_dt AND rl1.end_dt
+                      AND COALESCE(RL1.DLTD_FL, 0) = 0]]>
+    </getCountryCode>
+
+    <getLanguageCount>
+        <![CDATA[   SELECT COUNT(1)
+                    FROM lclz_dvce_lang LDL,
+                         rest_lclz_info R
+                    WHERE R.DVCE_LANG_KEY = LDL.DVCE_LANG_KEY
+                      AND R.SET_ID = :setId
+                      AND COALESCE(R.DLTD_FL, 0) = 0
+                      AND COALESCE(LDL.DLTD_FL, 0) = 0]]>
+    </getLanguageCount>
+
+    <getAllLocales>
+        <![CDATA[   SELECT LANG_ID,
+                           dvce_id,
+                           lang_cd,
+                           dvce_na,
+                           LCLE_NA
+                    FROM (SELECT LDL.LANG_ID,
+                                 ldl.dvce_id,
+                                 lang_cd,
+                                 NULL dvce_na,
+                                 (SELECT trnsltd_val
+                                  FROM lclz
+                                  WHERE lcle_id = (select lcle_id from mkt_lcl where mkt_id = :marketId and dflt = 1 and dltd_fl = 0)
+                                    AND lex_id = lc.lcle_na_lex_id
+                                 )       LCLE_NA
+                          FROM REST_LCLZ_INFO R,
+                               LCLZ_DVCE_LANG LDL,
+                               LANG L,
+                               LCLA LC
+                          WHERE R.SET_ID = :setId
+                            AND :effectiveDate BETWEEN R.STRT_DT AND R.END_DT
+                            AND COALESCE(R.DLTD_FL, 0) = 0
+                            AND COALESCE(LDL.DLTD_FL, 0) = 0
+                            and R.DVCE_LANG_KEY = LDL.DVCE_LANG_KEY
+                            AND L.LANG_ID = LC.LANG_ID
+                            AND LC.LCLE_ID = LDL.LANG_ID
+                            AND LC.DLTD_FL = 0
+                            AND L.DLTD_FL = 0
+                         ) LANG_DVC]]>
+    </getAllLocales>
+    <getCustomizedSmartReminders>
+        <![CDATA[   SELECT QNA,
+                           QSTN,
+                           SRG_ID
+                    FROM (
+                             SELECT COALESCE(QNA, '')  QNA,
+                                    COALESCE(QSTN, '') QSTN,
+                                    SRG_ID,
+                                    rank,
+                                    MAX(rank)          over (partition BY srg_id) maxrank
+                             FROM (
+                                      SELECT SRG.QNA,
+                                             SRG.QSTN,
+                                             SRG.SRG_ID,
+                                             CASE
+                                                 WHEN srg.SET_ID = :parentSetId
+                                                     THEN 1
+                                                 WHEN srg.SET_ID = :childSetId
+                                                     THEN 2
+                                                 END rank
+                                      FROM srg
+                                      WHERE srg.MKT_ID = :marketId
+                                        AND SRG.DLTD_FL = 0
+                                        AND SRG.DEVC_ID = :deviceId
+                                        AND SRG.LCLE_ID = :localeId
+                                        AND SRG.SET_ID IN (:parentSetId, :childSetId)) stb
+                         ) stb1
+                    where rank = maxrank]]>
+    </getCustomizedSmartReminders>
+    <getAllSmartReminderGroups>
+        <![CDATA[   SELECT SRG_ID,
+                           LCLE_ID LANG_ID,
+                           DEVC_ID,
+                           QNA,
+                           QSTN
+                    FROM SRG
+                    WHERE LVL = 1
+                      AND MKT_ID = :marketId
+                      AND DLTD_FL = 0]]>
+    </getAllSmartReminderGroups>
+    <getDeviceLex>
+        <![CDATA[   SELECT MKT_LKUP.lex_id
+                    FROM MKT_LKUP,
+                         lkup_typ
+                    WHERE MKT_LKUP.typ_id = lkup_typ.typ_id
+                      AND MKT_LKUP.MKT_ID = :marketId
+                      AND lkup_typ.gbl_lex_id = 25439]]>
+    </getDeviceLex>
+    
+    <getGlobalParamValue>
+        <![CDATA[   SELECT param_value
+                    FROM GLOBAL_PARAM
+                    WHERE PARAM_NAME = :paramName
+                      AND DLTD_FL = 0
+                      AND MKT_ID = :marketId]]>
+    </getGlobalParamValue>
+  
+    <populateNameDataTempTable>
+        <![CDATA[   BEGIN;
+        INSERT INTO HS_PRD_NA (hs_prd_na_id, prd_id, lang_id, shrt_na, lng_na, drv_na,
+                       cso_na, cod_na, cso_size_na, alt_na, shrt_mnit_na, sumr_mnit_na,
+                       prd_dvc_na, cso_gen_na, prmo_tx_labl, home_delivery_na,
+                       parent_shrt_na, parent_lng_na, parent_drv_na, parent_cso_na,
+                       parent_cod_na, parent_cso_size_na, parent_alt_na,
+                       parent_shrt_mnit_na, parent_sumr_mnit_na, parent_prd_dvc_na,
+                       parent_cso_gen_na, parent_prmo_tx_labl,
+                       parent_home_delivery_na, SMRT_RMDR)
+                (
+                SELECT :hs_prd_na_id, d.prd_id, d.lang_id, d.shrt_na, d.lng_na, d.drv_na,
+                       d.cso_na, d.cod_na, d.cso_size_na, d.alt_na, d.shrt_mnit_na, d.sumr_mnit_na,
+                       d.prd_dvc_na, d.cso_gen_na, d.prmo_tx_labl, d.home_delivery_na,
+                       d.shrt_na, d.lng_na, d.drv_na,
+                       d.cso_na, d.cod_na, d.cso_size_na, d.alt_na, d.shrt_mnit_na, d.sumr_mnit_na,
+                       d.prd_dvc_na, d.cso_gen_na, d.prmo_tx_labl, d.home_delivery_na, k.SMRT_RMDR
+                FROM mi_tbl_setvo v
+                                JOIN PRD_NA d ON d.prd_id = v.data_id AND d.prd_inst_id = v.data_inst_id AND d.dltd_fl = 0
+                                LEFT OUTER JOIN PRD_DTL k
+                                                                ON k.PRD_ID = V.DATA_ID AND k.PRD_INST_ID = V.DATA_INST_ID AND k.DLTD_FL = 0
+             WHERE v.set_id = :setId
+                 AND ':effectiveDate' BETWEEN v.strt_dt AND v.end_dt
+                 AND v.data_typ = :setType
+                 AND v.data_subtyp = 101
+                 AND (v.cust_stus_generaltab = 1 or :setType = 3002)
+                 AND v.data_id = v.data_id
+                 AND not exists (select 1 from hs_prd_na hsna where hsna.prd_id = d.prd_id
+                 AND hsna.lang_id = d.lang_id
+                 AND hsna.prd_dvc_na = d.prd_dvc_na AND hsna.hs_prd_na_id = :hs_prd_na_id));
+
+UPDATE HS_PRD_NA hsna SET
+                shrt_na =coalesce(case c1.shrt_na  when case :setType  when 3003 then  null  else parent_shrt_na end then  null  else c1.shrt_na end, hsna.shrt_na),
+                lng_na = coalesce(case c1.lng_na  when case :setType  when 3003 then  null  else parent_lng_na end then  null  else c1.lng_na end, hsna.lng_na),
+                drv_na = coalesce(case c1.drv_na  when case :setType  when 3003 then  null  else parent_drv_na end then  null  else c1.drv_na end, hsna.drv_na),
+                cso_na = coalesce(case c1.cso_na  when case :setType  when 3003 then  null  else parent_cso_na end then  null  else c1.cso_na end, hsna.cso_na),
+                cod_na = coalesce(case c1.cod_na  when case :setType  when 3003 then  null  else parent_cod_na end then  null  else c1.cod_na end, hsna.cod_na),
+                cso_size_na = coalesce(case c1.cso_size_na  when case :setType  when 3003 then  null  else parent_cso_size_na end then  null  else c1.cso_size_na end, hsna.cso_size_na),
+                alt_na = coalesce(case c1.alt_na  when case :setType  when 3003 then  null  else parent_alt_na end then  null  else c1.alt_na end, hsna.alt_na),
+                shrt_mnit_na = coalesce(case c1.shrt_mnit_na  when case :setType  when 3003 then  null  else parent_shrt_mnit_na end then  null  else c1.shrt_mnit_na end, hsna.shrt_mnit_na),
+                sumr_mnit_na = coalesce(case c1.sumr_mnit_na  when case :setType  when 3003 then  null  else parent_sumr_mnit_na end then  null  else c1.sumr_mnit_na end, hsna.sumr_mnit_na),
+                cso_gen_na = coalesce(case c1.cso_gen_na  when case :setType  when 3003 then  null  else parent_cso_gen_na end then  null  else c1.cso_gen_na end, hsna.cso_gen_na),
+                prmo_tx_labl = coalesce(case c1.prmo_tx_labl  when case :setType  when 3003 then  null  else parent_prmo_tx_labl end then  null  else c1.prmo_tx_labl end, hsna.prmo_tx_labl),
+                home_delivery_na = coalesce( case c1.home_delivery_na  when case :setType  when 3003 then  null  else parent_home_delivery_na end then  null else c1.home_delivery_na end, hsna.home_delivery_na)
+
+                FROM (SELECT d.prd_id, d.lang_id, d.lng_na, d.drv_na,
+                                d.shrt_na,
+                                d.cso_na, d.cod_na, d.cso_size_na, d.alt_na, d.shrt_mnit_na, d.sumr_mnit_na,
+                                d.prd_dvc_na, d.cso_gen_na, d.prmo_tx_labl, d.home_delivery_na, k.SMRT_RMDR
+                FROM mi_tbl_setvo v
+                                JOIN PRD_NA d ON d.prd_id = v.data_id AND d.prd_inst_id = v.data_inst_id AND d.dltd_fl = 0
+                                LEFT OUTER JOIN PRD_DTL k
+                                ON k.PRD_ID = V.DATA_ID AND k.PRD_INST_ID = V.DATA_INST_ID AND k.DLTD_FL = 0
+             WHERE v.set_id = :setId
+                 AND ':effectiveDate' BETWEEN v.strt_dt AND v.end_dt
+                 AND v.data_typ = :setType
+                 AND v.data_subtyp = 101
+                 AND (v.cust_stus_generaltab = 1 or :setType = 3002)
+                 AND v.data_id = v.data_id) c1
+                WHERE (hsna.prd_id = c1.prd_id AND hsna.lang_id = c1.lang_id AND hsna.prd_dvc_na = c1.prd_dvc_na AND hsna.hs_prd_na_id = :hs_prd_na_id);
+
+               end;
+]]>
+    </populateNameDataTempTable>
+
+</queries>

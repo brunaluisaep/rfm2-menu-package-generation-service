@@ -1,0 +1,54 @@
+# Default values for retail-menu-api.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global Values
+image:
+  pullPolicy: IfNotPresent
+
+# Package Generation Service
+packageGenerationService:
+  env: dev
+  activeProfile: dev
+  image:
+    repository: 135277302877.dkr.ecr.us-east-1.amazonaws.com/rfm2-menu-package-generation-service
+    tag: 6526b1b9803953daf7cece43b09a8fc8c1b8a10b
+  replicaCount: 2
+  service:
+    type: LoadBalancer
+    port: 8080
+    # Might need to add target information here
+  resources:
+    limits:
+      cpu: 600m
+      memory: 8Gi
+    requests:
+      cpu: 350m
+      memory: 5Gi
+  nodeSelector: {}
+  tolerations:
+    - key: "nodeType"
+      operator: "Equal"
+      value: "largeInstance"
+      effect: "PreferNoSchedule"
+  affinity: {}
+  logLevel: debug
+  port: 8080
+  # annotations:
+  #   service.beta.kubernetes.io/aws-load-balancer-type: "external"
+  #   service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+  #   service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing" 
+  # serviceAccountName: "rfm2-packageGenerationService-serviceaccount" 
+  market: ""
+
+# New Relic
+# newRelic:
+#   licensekey: ""
+#   appname: us-rfm2-dev-retailmenu
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80

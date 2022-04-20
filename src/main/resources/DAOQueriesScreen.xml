@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+
+	<getHotScreens>
+	<![CDATA[SELECT SCR_TYP FROM scr_typ_info WHERE dvce_typ = 'HOT']]>
+	</getHotScreens>
+	
+	<getDefaultButtonCaption>
+	<![CDATA[SELECT    
+		prop_val  
+	  FROM scr_bttn_dflt_prop
+	  WHERE UPPER (typ) = 'BUTTON'
+	  AND prop_na       ='CAPTION'
+	  and mkt_id        = :mktId
+	  AND dltd_fl       = 0]]>
+	</getDefaultButtonCaption>
+	
+	
+	<getDynamicWorkflowParameters>
+	<![CDATA[select PARM_ID from WRKFL_DEF wd,
+        wrkfl_parm_defn wpd
+      where wd.wrkfl_na = :wrkflname
+      and wpd.wrkfl_id  = wd.wrkfl_id
+      AND wd.mkt_id     =:mktId
+      AND wpd.mkt_id    =:mktId
+      and wd.dltd_fl    = 0
+      AND wpd.dltd_fl   = 0 ]]>
+	</getDynamicWorkflowParameters>
+	
+	<getLocalizationSets>
+	<![CDATA[SELECT pren_set_id,
+  		cusm_set_id
+		FROM REST_DATA
+		WHERE REST_ID    = :rstId
+		AND REST_INST_ID = :rstInstId
+		AND asn_set_typ  = 6015
+		AND dltd_fl      = 0
+		AND mkt_id=:marketId]]>
+	</getLocalizationSets>
+	
+	
+	<getLocalizedField>
+	<![CDATA[		SELECT COALESCE(RL2.CTRY_ID,RL1.CTRY_ID) CTRY_ID,
+	  COALESCE(RL2.lang_id,RL1.lang_id) lang_id
+	FROM rest_lclz_info RL1
+	LEFT OUTER JOIN REST_LCLZ_INFO RL2
+	ON RL2.set_id = :chdStId
+	AND current_date BETWEEN rl2.strt_dt AND rl2.end_dt
+	AND COALESCE(RL2.DLTD_FL ,0) = 0
+	WHERE RL1.SET_ID        = :prtStId
+	AND current_date BETWEEN RL1.STRT_DT AND RL1.END_DT
+	AND COALESCE(RL1.DLTD_FL,0) = 0]]>
+	</getLocalizedField>
+	
+
+
+
+
+	<getAssignedScreenSet>
+		<![CDATA[ SELECT distinct sl.chld_set_id, set_na na, s.data_inst_id
+		FROM rest_data rd,
+		  set_layr sl,
+	    tbl_setvo s
+		WHERE rest_id    = :restId
+		AND rest_inst_id = :restInstId
+		AND ASN_SET_TYP  = 60085003
+		and sl.pren_set_id = rd.pren_set_id
+		AND s.set_id = sl.chld_set_id
+	  	and rd.dltd_fl = 0
+		and sl.dltd_fl = 0
+	    and s.data_typ = 5003
+	    and s.mkt_id= :marketId
+	    and :effectiveDate between s.strt_dt and s.end_dt]]>
+	</getAssignedScreenSet>
+
+	<getScheduleSize>
+		<![CDATA[select count(*) as count from(
+		select node_id from pkg_sch_rest where req_id = :requestId
+		except
+		select node_id from pkg_susp_rest where mkt_id = :marketId and dltd_fl = 0) scheduleCount]]>
+	</getScheduleSize>
+
+	<getDefaultLocaleId>
+		<![CDATA[SELECT lcle_id FROM mkt_lcl WHERE mkt_id = :marketId AND dltd_fl = 0 AND dflt = 1]]>
+	</getDefaultLocaleId>
+
+	
+<getBLMButtonDetails>
+	<![CDATA[select * from(
+      select 
+       b.bttn_id,
+      b.scr_id,
+      b.data_inst_id,
+      tbl_sets.set_id,
+        tbl_sets.typ,
+        l.ord,        
+      max(l.ord) over(partition by bttn_id) as maxord,
+        BTTN_NU,
+	  CAT,
+	  FRGND_CPTN_COLR_ID,
+	  FRGND_CPTN_COLR_PRSD_ID,
+	  BKGD_CPTN_COLR_ID,
+	  BKGD_CPTN_COLR_PRSD_ID,
+	  KEY_SCAN,
+	  KEY_SHFT,
+	  WDTH,
+	  HGHT,
+	  prd_cd,
+	  sound_file_id,
+	  tbl_sets.data_id id,
+	  b.OUTAGE_MODE      
+      from   bttn b,
+  		NODE n,
+        NODE_HRCY nh,
+        rfm_level l,
+      ( select ss.typ,ss.set_id,ts.data_id, ts.data_inst_id, ts.crtr_node_id  from       
+      (select * from sets s where s.na = :screenName
+      and s.typ            in (5003,5004)
+      AND s.dltd_fl         = 0
+      and      s.crtr_node_id in 
+       (WITH RECURSIVE cte AS (
+		  SELECT node_hr.node_id,node_hr.chld_node_id, 1 as level
+          FROM NODE_HRCY node_hr
+          WHERE node_hr.chld_node_id <> node_hr.node_id
+          AND node_hr.dltd_fl         = 0 and chld_node_id  = (:nodeId)
+          UNION  ALL		
+          SELECT  node_hr.node_id, node_hr.chld_node_id, c.level + 1 from NODE_HRCY node_hr
+   		  inner join  cte c ON  c.node_id = node_hr.chld_node_id where node_hr.node_id>0 and level <=3
+   		  and  node_hr.node_id <> node_hr.chld_node_id
+   		  ) SELECT node_id FROM   cte  ORDER  BY level
+        )
+      or s.crtr_node_id = :nodeId) ss,    tbl_setvo ts where     ts.data_id in (:screenIds)
+       and ts.data_typ in (5003,5004)  AND TS.DATA_SUBTYP IN (5003001,5004001)  AND :effectiveDate between ts.strt_dt and ts.end_dt
+      and ts.set_id=ss.set_id ) tbl_sets    where
+      tbl_sets.crtr_node_id    = nh.chld_node_id
+      AND n.node_id         = nh.node_id
+      AND (n.typ           <> 'S' OR n.typ             IS NULL)
+      AND nh.node_id       <> nh.chld_node_id
+      AND nh.lvl            = l.level_id      
+      AND n.dltd_fl         = 0
+      AND nh.dltd_fl        = 0
+      and b.scr_id = tbl_sets.data_id
+      and b.data_inst_id = tbl_sets.data_inst_id       and b.dltd_fl = 0
+      AND COALESCE(b.blm_fl,0) = 1 AND COALESCE(b.enbl_fl,0) = 1 AND COALESCE(b.lclz_fl,0) = 1) as blm
+      where ord = maxord  
+      ]]>
+	</getBLMButtonDetails>	
+
+	<getScreenDetails>
+		<![CDATA[SELECT S.SCR_ID,
+		  S.DATA_INST_ID,
+		  s.TYP,
+		  S.SCR_NU ,
+		  CASE when S.TOUT = 1 then 'true' else 'false' end  TOUT,
+		  S.TITL,
+		  S.SCR_BKGD_IMG,
+		  case  when S.typ in ('2800','2850','2851','2852','2853','2854') then S.DYPT_NA else null end DYPT_NA,
+		  case when S.typ  IN ('2800','2801','2802') THEN S.SCR_BKGD_COLR_ID ELSE null END SCR_BKGD_COLR_ID,
+		  S.GRLL_GRP_ID,
+		  S.SRG_ID,
+		  S.SOUND_FILE_ID
+		FROM SCR S,
+		  TBL_SETVO TS
+		WHERE TS.SET_ID = :setId
+		AND :effectiveDate BETWEEN TS.STRT_DT AND TS.END_DT
+		AND TS.DATA_TYP     = 5003
+		AND TS.DATA_ID      = S.SCR_ID
+		AND ts.data_inst_id = s.data_inst_id
+		AND S.DLTD_FL = 0 order by s.scr_nu ]]>
+	</getScreenDetails>
+	
+	<getScreenWorkflows>
+	<![CDATA[SELECT SCR_WRKFL_ASGN_ID,
+		  WRKFL_ID,
+		  EVNT_ID, 
+		  SCR_ID,
+		  SCR_INST_ID
+		FROM SCR_WRKFL_ASGN S
+		WHERE (S.SCR_ID, S.SCR_INST_ID) in (values :valuesMap) 
+		AND S.DLTD_FL = 0]]>
+</getScreenWorkflows>
+
+<getScreenWorkflowParameters>
+	<![CDATA[select PARM_ID,PARM_TYP,VAL, scr_wrkfl_asgn_id
+	         from SCR_WRKFL_ASGN_PARM
+	         where scr_wrkfl_asgn_id IN(:screenWrkflIds)]]>
+</getScreenWorkflowParameters>
+
+<getScreenLookupParameter>
+<![CDATA[SELECT COALESCE(le.pkg_gen_cd,l.trnsltd_val) parm_val, le.entr_val
+		  FROM lkup_na ln, lkup_entr le, 
+		       lclz l
+		  where ln.lkup_na_id = le.lkup_na_id
+			  and le.entr_val IN (:listWorkflwparam)
+			  and le.dltd_fl    =0
+			  and le.entr_val    = l.lex_id    
+			  AND l.lcle_id     = :mktlocaleId]]>
+</getScreenLookupParameter>
+
+<getRestaurantMenuItems>
+<![CDATA[SELECT
+        prd_cd,        
+        (prd_inf.CPTN_LN_1
+            ||' '
+            ||prd_inf.cptn_ln_2
+            ||' '
+            ||PRD_INF.CPTN_LN_3)
+        CPTN ,
+        prd_inf.IMG_NA,
+        prd_inf.FG_NRML_NA,
+        prd_inf.FG_PRSD_NA,
+        prd_inf.BG_NRML_NA,
+        prd_inf.BG_PRSD_NA
+      FROM PKG_PRD_INFO PRD_INF
+      WHERE U_ID = :uniqueId
+      AND EFF_DT = :effectiveDate
+      AND APRV_STUS = 1]]>
+</getRestaurantMenuItems>
+<getDynamicButtonDetails>
+	<![CDATA[
+SELECT b.scr_id, b.DATA_INST_ID,
+      b.BTTN_ID,
+	  b.BTTN_NU,
+	  b.CAT,
+	  b.KEY_SCAN,
+	  b.KEY_SHFT,
+	  b.WDTH,
+	  b.HGHT,
+	  b.sound_file_id,
+    seq_id seq,
+    min(seq_id) over (partition by db.bttn_id) minseq,
+    db.prd_cd,
+      b.OUTAGE_MODE
+	from bttn b,
+  dynmc_bttn db
+   WHERE (b.scr_id, b.DATA_INST_ID) in (values :valuesMap)
+   AND b.scr_id = db.scr_id
+  and b.data_inst_id = db.data_inst_id
+  AND b.bttn_id = db.bttn_id
+	AND COALESCE(BLM_FL,0) = 0
+	AND COALESCE(LCLZ_FL,0) = 0
+	and COALESCE(enbl_fl,0) = 1
+	and COALESCE(is_dynmc_bttn,0) = 1
+	and b.dltd_fl = 0
+  AND db.dltd_fl = 0 order by scr_id,data_inst_id , bttn_id ,seq_id
+ 
+ ]]>
+	</getDynamicButtonDetails>	
+	<getAllWorkflows>
+		<![CDATA[select wrkfl_id, wrkfl_na from wrkfl_def where mkt_id = :marketId and dltd_fl = 0]]>
+	</getAllWorkflows>
+
+	<getAllEvents>
+		<![CDATA[select evnt_id,LOWER(evnt_na) as event_name from evnt where mkt_id = :marketId and dltd_fl = 0 ]]>
+	</getAllEvents>
+
+	<getAllWorkflowParams>
+		<![CDATA[SELECT P.PARM_ID, P.PARM_NA FROM WRKFL_PARM_DEFN WD, PARM P
+		WHERE WD.PARM_ID = P.PARM_ID
+		AND WD.DLTD_FL = 0
+		AND P.DLTD_FL =0
+		AND WD.MKT_ID = :marketId]]>
+	</getAllWorkflowParams>
+
+	<getAllGrillGroups>
+		<![CDATA[SELECT GRLL_GRP_ID,GRLL_GRP_NA  FROM GRLL_GRP WHERE MKT_ID = :marketId AND DLTD_FL = 0]]>
+	</getAllGrillGroups>
+
+	<getAllSmartReminders>
+		<![CDATA[SELECT DISTINCT SRG_ID,SRG_NA  FROM SRG WHERE MKT_ID = :marketId AND DLTD_FL = 0]]>
+	</getAllSmartReminders>
+	<getButtonWorkflowParameters>
+	<![CDATA[select PARM_ID,PARM_TYP,VAL,BTTN_WRKFL_ASGN_ID AS ID  from BTTN_WRKFL_ASGN_PARM 
+	             where BTTN_WRKFL_ASGN_ID IN (:buttonWorkflowAssignIds) and dltd_fl = 0]]>
+	</getButtonWorkflowParameters>
+	<getMasterButtonDetails>
+		<![CDATA[SELECT BTTN_ID,
+		  BTTN_NU,
+		  CAT,
+		  FRGND_CPTN_COLR_ID,
+		  FRGND_CPTN_COLR_PRSD_ID,
+		  BKGD_CPTN_COLR_ID,
+		  BKGD_CPTN_COLR_PRSD_ID,
+		  KEY_SCAN,
+		  KEY_SHFT,
+		  WDTH,
+		  HGHT,
+		  PRD_CD,
+		  sound_file_id,
+		  CASE
+			WHEN BLM_FL ='1'
+			THEN 'Y'
+			ELSE 'N'
+		  END IS_BLM,
+          CASE
+			WHEN IS_DYNMC_BTTN ='1'
+			THEN 'Y'
+			ELSE 'N'
+		  END IS_DYNAMIC,
+		  scr_id as id, 
+		  DATA_INST_ID as instId,
+		  OUTAGE_MODE
+		FROM BTTN
+		WHERE (scr_id, DATA_INST_ID) in (values :valuesMap) 
+		--AND NVL(BLM_FL,0) = 0
+		AND coalesce(LCLZ_FL,0) = 0
+		AND coalesce(ENBL_FL,0) = 1
+		--AND NVL(IS_DYNMC_BTTN,0) = 0
+		AND DLTD_FL = 0 order by bttn_nu]]>
+	</getMasterButtonDetails>
+	<getButtonLangDetails>
+	<![CDATA[SELECT bl.BTTN_ID, bl.LANG_ID,bl.CPTN,bl.BMP,bl.BMP_PRSD, bl.SCR_ID as id, bl.DATA_INST_ID as instId 
+	        FROM BTTN_LANG bl
+			JOIN SCR s ON s.scr_id = bl.scr_id AND s.data_inst_id = bl.data_inst_id AND s.dltd_fl = 0
+			WHERE  (bl.scr_id, bl.DATA_INST_ID) in (values :valuesMap) AND bl.DLTD_FL = 0
+				AND (
+					(bl.LANG_ID IN (SELECT :defaultLang union select lcle_id from mkt_lcl ml where ml.mkt_id = bl.mkt_id and ml.dflt = 1 and ml.dltd_fl = 0) and s.typ not in ('2800', '2801', '2802', '2803', '2804', '2805', '2806', '2850', '2851', '2852', '2853', '2854', '2950', '2951', '2952', '2953', '2954', '2955', '2957', '2958', '2959', '2960'))
+				or 
+					(bl.LANG_ID IN (:langIds) and s.typ in ('2800', '2801', '2802', '2803', '2804', '2805', '2806', '2850', '2851', '2852', '2853', '2854', '2950', '2951', '2952', '2953', '2954', '2955', '2957', '2958', '2959', '2960'))
+				)]]>
+	</getButtonLangDetails>
+	<getAllScreenLocales>
+		<![CDATA[SELECT distinct LANG_ID,
+		lang_cd,
+		LCLE_NA
+		FROM
+		(SELECT LDL.LANG_ID, lang_cd, 
+			(SELECT trnsltd_val FROM lclz where lcle_id = CAST(:marketLocaleId AS integer) AND lex_id = lc.lcle_na_lex_id) LCLE_NA
+		FROM REST_LCLZ_INFO R,LCLZ_DVCE_LANG LDL,
+		  LANG L,
+		  LCLA LC,
+		  sets setsL
+		WHERE setsL.mkt_id =  CAST(:marketId AS integer)
+		AND R.SET_ID = setsL.set_id
+		AND :effectiveDate BETWEEN R.STRT_DT AND R.END_DT
+		AND coalesce(R.DLTD_FL ,'0') =  '0'
+		AND coalesce(LDL.DLTD_FL ,'0') = '0'
+		AND R.DVCE_LANG_KEY = LDL.DVCE_LANG_KEY
+		AND L.LANG_ID           = LC.LANG_ID
+		AND LC.LCLE_ID          = LDL.LANG_ID
+		AND LC.DLTD_FL          = 0
+		and l.dltd_fl           = 0
+		and setsL.DLTD_FL       = 0
+		)LANG_DVC]]>
+</getAllScreenLocales>
+
+<getButtonWorkflows>
+	<![CDATA[SELECT BTTN_WRKFL_ASGN_ID,
+		  WRKFL_ID,
+		  EVNT_ID,
+		   BTTN_ID, BTTN_INST_ID
+		FROM BTTN_WRKFL_ASGN B
+		WHERE B.BTTN_ID in (:arrayBttnIds)				 
+		AND B.BTTN_INST_ID in (:arrayScreenInstIds)
+		AND B.DLTD_FL       = 0]]>
+	</getButtonWorkflows>
+	
+	
+	<getButtonProductCode>
+<![CDATA[SELECT bwp.val, bwa.bttn_id as id, bwa.bttn_inst_id   as instId
+FROM bttn_wrkfl_asgn bwa,
+  evnt e,
+  bttn_wrkfl_asgn_parm bwp,
+  parm p  
+WHERE bwa.bttn_id          in (:arrayBttnIds)
+AND bwa.bttn_inst_id       in (:arrayScreenInstIds)
+AND bwa.evnt_id            = e.evnt_id
+AND e.dltd_fl              = 0
+AND bwa.dltd_fl            = 0
+AND lower(e.evnt_na)       = 'onclick'
+AND bwa.bttn_wrkfl_asgn_id = bwp.bttn_wrkfl_asgn_id
+AND bwp.parm_id            = p.parm_id
+and p.vald_req = 2
+ORDER BY p.dspl_ord,
+  lower(p.parm_na)]]>
+</getButtonProductCode>
+
+
+<getBLMLangDetails>
+	<![CDATA[SELECT BTTN_ID, LANG_ID,CPTN,BMP,BMP_PRSD, BTTN_ID as id, DATA_INST_ID as instId 
+	            FROM BTTN_LANG
+	            WHERE BTTN_ID in (:arrayBttnIds)
+	            AND DATA_INST_ID  in (:arrayScreenInstIds)
+	            AND DLTD_FL = 0]]>
+	</getBLMLangDetails>
+	<getMenuItemPOSKVSPresentation>
+	<![CDATA[SELECT d.prd_id, d.prd_inst_id, p.prd_cd,bg_nrml, bg_prsd,AUX_MENU_ITM,
+              fg_nrml, fg_prsd, cptn_ln_1, cptn_ln_2, cptn_ln_3,img,prod_prd_grp
+from mi_tbl_setvo v
+   left outer JOIN prd_dtl d ON d.prd_id = v.data_id 
+   AND d.prd_inst_id = v.data_inst_id
+   AND d.dltd_fl = 0
+   join prd p on p.prd_id = v.data_id and p.prd_inst_id =  v.data_inst_id
+    WHERE v.set_id = :setId
+              AND :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+              AND v.data_typ = :type
+              AND v.mkt_id = :mktId
+              AND v.data_subtyp = 101
+              and (data_typ = 3002 or  v.cust_stus_poskvstab =1)
+			  AND v.data_id in (:prdIDs)]]>
+	</getMenuItemPOSKVSPresentation>
+</queries>

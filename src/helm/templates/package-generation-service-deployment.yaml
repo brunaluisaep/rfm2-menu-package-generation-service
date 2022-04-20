@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "package-generation-service.fullname" . }}
+  labels:
+    {{- include "package-generation-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.packageGenerationService.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "package-generation-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "package-generation-service.selectorLabels" . | nindent 8 }}
+        {{/*- include "package-generation-service.newRelicLabels" . | nindent 8 */}}
+    spec:
+      {{/*serviceAccountName: {{ .Values.packageGenerationService.serviceAccountName }}*/}}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.packageGenerationService.image.repository }}:{{ .Values.packageGenerationService.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.packageGenerationService.logLevel }}
+            - name: PORT
+              value: {{ .Values.packageGenerationService.port | quote }}
+             {{/*- name: NEW_RELIC_LICENSE_KEY
+              value: {{ .Values.newRelic.licensekey | quote }}
+            - name: NEW_RELIC_APP_NAME
+              value: {{ .Values.newRelic.appname | quote }}*/}}
+            - name: EKS_ENV
+              value: {{ .Values.packageGenerationService.env | quote }}
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.packageGenerationService.activeProfile | quote }}
+             {{/*- name: AWS_PARAMETER_STORE_CONNECTION_STRING
+                value: {{ .Values.packageGenerationService.paramaterStoreConnectionString | quote }}*/}}
+          lifecycle:
+            postStart:
+              exec:
+                command: [ "/bin/sh", "-c", "/tmp/mountTSS.sh" ]
+          ports:
+            - name: http
+              containerPort: {{ .Values.packageGenerationService.service.port }}
+              protocol: TCP
+          securityContext:
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - DAC_READ_SEARCH
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: {{ .Values.packageGenerationService.service.port }}
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{ .Values.packageGenerationService.service.port }}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            successThreshold: 3
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{ .Values.packageGenerationService.service.port }}
+            periodSeconds: 60
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+            initialDelaySeconds: 60
+          resources:
+            {{- toYaml .Values.packageGenerationService.resources | nindent 12 }}
+      {{- with .Values.packageGenerationService.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.packageGenerationService.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.packageGenerationService.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

@@ -1,0 +1,89 @@
+# This is a basic github action to run the sonarqube scan
+# Scan will be run on creation of merge request into master and push to master
+name: CI QA US
+# Controls when action will run
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  pull_request:
+    branches:
+      - master
+      - main
+      - 'release/**'
+    # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  push-artifact-to-ECR-qa-us:
+    runs-on: ubuntu-latest
+    env:
+      HELM_EXPERIMENTAL_OCI: 1
+      DOCKERFILE_PATH: docker/non-prod/us/qa/Dockerfile
+    steps:
+      - uses: actions/checkout@v2
+
+        # Cache Maven
+      - name: Cache Maven Packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven
+
+        # Set up Java 11
+      - name: Set up JDK 1.11
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.11
+
+        # AWS Credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.RFM2_AWS_GITHUB_135277302877_NONPROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.RFM2_AWS_GITHUB_135277302877_NONPROD_SECRET_KEY }}
+          aws-region: us-east-1
+          role-to-assume: RFM2_AWS_GITHUB_135277302877_NONPROD_ROLE
+          role-skip-session-tagging: true
+          role-duration-seconds: 1200
+
+        # Install Helm
+      - name: Helm tool installer
+        uses: azure/setup-helm@v1
+        with:
+          version: '3.6.3'
+        id: install
+
+        # see: https://github.com/aws-actions/amazon-ecr-login
+      - name: Log in to Amazon ECR Non-Prod
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+        # tag prod images with commit and ref and push both to ECR
+      - name: Build, tag, and push docker images to Amazon ECR Non-Prod
+        env:
+          ECR_REPOSITORY: ${{ secrets.RFM2_DOCKER_REPO_QA_US }}
+          IMAGE_TAG: package-generation-service-qa-us-${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          mvn clean install -Dmaven.test.skip=true
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f $DOCKERFILE_PATH .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+        # Save and push the helm chart to ECR
+      - name: Package and push helm chart to Amazon ECR Non-Prod
+        working-directory: src/helm
+        env:
+          HELM_ECR_REPOSITORY: ${{ secrets.RFM2_HELM_PRERELEASE_REPO_QA_US }}
+          HELM_CHART_TAG: package-generation-service-qa-us-${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          aws ecr get-login-password --region us-east-1 | helm registry login --username AWS --password-stdin $ECR_REGISTRY
+          helm chart save . $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+          helm chart push $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+        
+        # Log out of Amazon ECR
+      - name: Log out of Amazon ECR
+        if: always()
+        run: docker logout ${{ steps.login-ecr.outputs.registry }}

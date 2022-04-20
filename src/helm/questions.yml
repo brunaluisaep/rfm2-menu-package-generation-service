@@ -1,0 +1,19 @@
+categories:
+  - packageGenerationService
+questions:
+  - variable: packageGenerationService.image.tag
+    default: "6526b1b9803953daf7cece43b09a8fc8c1b8a10b"
+    description: "The version of package-generation-service to run based on sha, eg. 6526b1b9803953daf7cece43b09a8fc8c1b8a10b"
+    label: "The version of package-generation-service to run based on sha, eg. 6526b1b9803953daf7cece43b09a8fc8c1b8a10b"
+    type: string
+    required: true
+  - variable: packageGenerationService.replicaCount
+    default: 2
+    description: "Number of replicas to run"
+    label: "Replica Count"
+    type: int
+  - variable: packageGenerationService.logLevel
+    default: info
+    description: "Log level for service"
+    label: "Log Level"
+    type: string

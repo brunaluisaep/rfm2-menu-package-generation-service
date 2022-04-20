@@ -1,0 +1,3009 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+ <getStoreHours>
+ <![CDATA[
+   select ML.entr_cd as restPresentAreaCode,ML.pkg_gen_cd as restPresentArea,pricecode_conv ,sun_strt_tm,
+sun_end_tm ,mon_strt_tm ,mon_end_tm ,tue_strt_tm ,tue_end_tm ,wed_strt_tm ,wed_end_tm ,thu_strt_tm ,
+thu_end_tm ,fri_strt_tm ,fri_end_tm ,sat_strt_tm ,sat_end_tm
+  FROM REST_ALT_ORD RAO
+  join MW_PKGGEN_LKUP_CD ML on  ML.ENTR_CD=RAO.psnt_area_cd
+    JOIN LKUP_NA LN ON LN.LEX_ID = ML.LEX_ID
+    JOIN LKUP_ENTR LE ON LE.LKUP_NA_ID = LN.LKUP_NA_ID
+      AND LE.ENTR_CD = ML.ENTR_CD AND LE.DLTD_FL = 0
+    JOIN LEX LEV ON LEV.LEX_ID = LE.ENTR_DS AND LEV.DLTD_FL = 0
+  WHERE RAO.REST_ID     = :restId
+  AND RAO.REST_INST_ID  = :restinstId
+  AND RAO.SUN_STRT_TM IS NOT NULL AND  RAO.SUN_END_TM IS NOT NULL
+  AND  RAO.MON_STRT_TM IS NOT NULL AND  RAO.MON_END_TM IS NOT NULL
+  AND  RAO.TUE_STRT_TM IS NOT NULL AND  RAO.TUE_END_TM IS NOT NULL
+  AND  RAO.WED_STRT_TM IS NOT NULL AND  RAO.WED_END_TM IS NOT NULL
+  AND  RAO.THU_STRT_TM IS NOT NULL AND  RAO.THU_END_TM IS NOT NULL
+  AND  RAO.FRI_STRT_TM IS NOT NULL AND  RAO.FRI_END_TM IS NOT NULL
+  AND  RAO.SAT_STRT_TM IS NOT NULL AND  RAO.SAT_END_TM IS NOT NULL
+  AND  RAO.PRICECODE_CONV IS NOT null
+  AND RAO.dltd_fl =0
+  AND ML.LEX_ID = (SELECT  lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90012 AND l.DLTD_FL = 0)
+  ORDER BY ML.PKG_GEN_CD
+ ]]>
+ </getStoreHours>
+
+<getStoreDetails>
+<![CDATA[ 
+SELECT 
+  COALESCE(cast(R.NODE_ID as varchar), '') rfmId, 
+  COALESCE(R.CO_ID, '') companyId, 
+  COALESCE(cast(R.REST_NU as varchar), '') storeId, 
+  COALESCE(r.LGCY_ID, '') storeLegacyId, 
+  trim(COALESCE(a.AD_LN_1, '') ||E'\n'|| COALESCE(a.AD_LN_2, '')||E'\n'|| COALESCE(a.AD_LN_3, '')||E'\n'|| COALESCE(a.AD_LN_4, '')) storeAddress, 
+  COALESCE(A.ZIP, '') storeZipCode, 
+  COALESCE(A.CITY, '') city, 
+  COALESCE(S.STAT_CD, '') state, 
+  COALESCE(C.CTRY_CD, '') country, 
+  COALESCE(R.EML, '') email, 
+  COALESCE(R.WEB_HOME_PAGE, '') homePage, 
+  COALESCE(A.PHNE_NU, '') storePhone, 
+  COALESCE(r.HELP_DSK_INFO, '') helpDeskInfo, 
+  (
+    select string_agg(cast(ML.PKG_GEN_CD as varchar), ',' order by ML.PKG_GEN_CD) 
+		from MW_PKGGEN_LKUP_CD as ML
+		join REST_POD as RP  on  cast(RP.POD_ID as varchar)= ML.ENTR_CD where 
+		ML.LEX_ID = ( select LEX_ID from MKT_LKUP as M, LKUP_TYP as L where M.MKT_ID = :marketId
+			and M.TYP_ID = L.TYP_ID
+			and L.GBL_LEX_ID = 90015
+			and L.DLTD_FL = 0)
+	and RP.REST_ID = :restId
+	and RP.REST_INST_ID = :restInstId
+	and RP.DLTD_FL = 0
+  ) sellPoints, 
+  COALESCE((
+      SELECT ML.PKG_GEN_Cd  from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = 86 and ml.entr_cd =cast(r.ownr_typ as varchar)), ' ') ownerShipType ,
+  r.lat  latitude,
+  r.lon  longitude
+FROM 
+  REST r 
+  inner join AD a on r.AD_ID = a.AD_ID
+  inner join CTRY c on cast(c.CTRY_ID as varchar) = a.CTRY 
+ left join STAT s on cast(s.STAT_ID as varchar)= a.ST 
+WHERE 
+  r.REST_ID = :restId 
+  AND r.REST_INST_ID = :restInstId 
+  AND r.mkt_id= :marketId
+  AND r.DLTD_FL = 0
+]]>
+</getStoreDetails>
+
+<getBunBufferDetails>
+<![CDATA[
+SELECT COALESCE(p.BUN_NU, c.BUN_NU) bunId,
+        COALESCE(p.BUN_NA, c.BUN_NA) bunName,
+        COALESCE(p.DSPL_PRRT, c.DSPL_PRRT ) disp,
+        COALESCE(c.QT_TO_BFFR, p.QT_TO_BFFR) qtb,
+        COALESCE(p.BFFR_TM, c.BFFR_TM) bufferTime,
+        (SELECT MV.PKG_GEN_CD    FROM MW_PKGGEN_LKUP_CD MV  WHERE MV.LEX_ID = 110 AND cast(MV.ENTR_CD as numeric) = COALESCE(p.stus , c.stus)) status
+      FROM
+        (SELECT bpt.BUN_NU, bpt.BUN_NA,bpt.DSPL_PRRT,bpt.QT_TO_BFFR,bpt.BFFR_TM ,bpt.STUS FROM BUN_PREP_TYP bpt 
+        WHERE bpt.SET_ID = (select SET_ID as INSTANCEID from sets where MKT_ID=:marketId and typ=3007 and MSTR=1 and dltd_fl=0) AND bpt.DLTD_FL= 0 and bpt.mkt_id=:marketId) p 
+        LEFT OUTER JOIN
+        (SELECT bpt1.BUN_NU,bpt1.BUN_NA,bpt1.DSPL_PRRT,bpt1.QT_TO_BFFR,bpt1.BFFR_TM ,bpt1.STUS FROM BUN_PREP_TYP bpt1 
+        WHERE bpt1.SET_ID = COALESCE((select SET_ID as INSTANCEID  from sets where typ=3007 and CRTR_NODE_ID=:nodeId and dltd_fl=0),-99) AND bpt1.DLTD_FL   = 0 and bpt1.mkt_id=:marketId) c
+      ON p.BUN_NU= c.BUN_NU
+      ORDER BY p.BUN_NU
+]]>
+
+</getBunBufferDetails>
+	<getDayPartParentSet>
+<![CDATA[	SELECT
+pren_set_id,
+cusm_set_id
+FROM
+tbl_setvo s,
+rest_data r
+WHERE
+rest_inst_id = :rest_inst_id
+AND rest_id = :rest_id
+AND to_date(:eff_dt, 'MM/DD/YYYY') BETWEEN strt_dt AND end_dt
+AND data_typ = 6008
+AND asn_set_typ = 6032
+AND crtr_node_id = :node_id
+AND r.dltd_fl = 0;
+]]>
+	</getDayPartParentSet>
+	
+	<getDayPartSet>
+<![CDATA[
+    SELECT
+coalesce (c.dypt_prd_na, p.dypt_prd_na) dypt_prd_na,	
+case when coalesce (c.mon_strt_tm, p.mon_strt_tm) is NULL then ''else coalesce (c.mon_strt_tm, p.mon_strt_tm) end as mon_strt_tm,
+case when coalesce (c.mon_end_tm, p.mon_end_tm) is null then ' ' else coalesce(c.mon_end_tm, p.mon_end_tm) end as mon_end_tm,
+case when coalesce(c.tue_strt_tm, p.tue_strt_tm) is  null then ' 'else  coalesce(c.tue_strt_tm, p.tue_strt_tm) end as tue_strt_tm,
+case when coalesce(c.tue_end_tm, p.tue_end_tm) is  null then ' 'else coalesce(c.tue_end_tm, p.tue_end_tm) end as tue_end_tm,
+case when coalesce (c.wed_strt_tm, p.wed_strt_tm)is  null then ' 'else coalesce (c.wed_strt_tm, p.wed_strt_tm) end as wed_strt_tm,
+case when coalesce (c.wed_end_tm, p.wed_end_tm)is  null then ' 'else coalesce (c.wed_end_tm, p.wed_end_tm) end as wed_end_tm,
+case when coalesce (c.thu_strt_tm, p.thu_strt_tm)is  null then ' 'else coalesce (c.thu_strt_tm, p.thu_strt_tm) end as thu_strt_tm,
+case when coalesce (c.thu_end_tm, p.thu_end_tm)is  null then ' 'else coalesce (c.thu_end_tm, p.thu_end_tm) end as thu_end_tm,
+case when coalesce (c.fri_strt_tm, p.fri_strt_tm)is  null then ' 'else coalesce (c.fri_strt_tm, p.fri_strt_tm) end as fri_strt_tm,
+case when coalesce (c.fri_end_tm, p.fri_end_tm)is  null then ' 'else coalesce (c.fri_end_tm, p.fri_end_tm) end as fri_end_tm,
+case when coalesce (c.sat_strt_tm, p.sat_strt_tm)is  null then ' 'else coalesce (c.sat_strt_tm, p.sat_strt_tm) end as sat_strt_tm,
+case when coalesce (c.sat_end_tm, p.sat_end_tm)is  null then ' 'else coalesce (c.sat_end_tm, p.sat_end_tm) end as sat_end_tm,
+case when coalesce (c.sun_strt_tm, p.sun_strt_tm)is  null then ' 'else coalesce (c.sun_strt_tm, p.sun_strt_tm) end as sun_strt_tm,
+case when coalesce (c.sun_end_tm, p.sun_end_tm)is  null then ' 'else coalesce (c.sun_end_tm, p.sun_end_tm) end as sun_end_tm
+FROM
+( (
+SELECT
+a.*
+FROM
+rest_dypt a
+JOIN setvo b ON a.DATA_ID = b.DATA_ID
+AND a.data_inst_id  = b.DATA_INST_ID
+WHERE
+b.SET_ID  = :pren_set_id
+) p
+LEFT JOIN (
+SELECT
+a.*
+FROM
+rest_dypt a
+JOIN setvo b ON a.DATA_ID  =  b.DATA_ID
+AND a.data_inst_id  = b.DATA_INST_ID
+WHERE
+SET_ID = :cust_set_id
+) c ON p.DATA_ID = c.DATA_ID ); 
+]]>
+	</getDayPartSet>
+
+
+<getFeeSetIds>
+<![CDATA[ 
+SELECT pren_set_id,
+      cusm_set_id
+FROM tbl_setvo s,
+      rest_data r
+WHERE rest_inst_id = :rest_inst_id
+    AND rest_id        = :rest_id
+    AND :effectiveDate BETWEEN strt_dt AND end_dt
+    AND data_typ     = 6008
+    AND asn_set_typ  = 4012
+    AND crtr_node_id = :node_id
+    AND r.mkt_id=	:mktid 
+    AND r.dltd_fl    = 0;
+]]>
+</getFeeSetIds>
+
+<getDepositSetIds>
+<![CDATA[ 
+SELECT pren_set_id,
+      cusm_set_id
+FROM tbl_setvo s,
+      rest_data r
+WHERE rest_inst_id = :rest_inst_id
+    AND rest_id        = :rest_id
+    AND :effectiveDate BETWEEN strt_dt AND end_dt
+    AND data_typ     = 6008
+    AND asn_set_typ  = 4022
+    AND crtr_node_id = :node_id
+    AND r.mkt_id=	:mktid 
+    AND r.dltd_fl    = 0;
+]]>
+</getDepositSetIds>
+
+<getFeeDetails>
+<![CDATA[ 
+SELECT 
+    FEE_MSTR.FEE_DATA_ID                                                               AS "dataId",
+    FEE_MSTR.FEE_ID                                                                    AS "feeCode",
+    (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37478 and entr_cd=CAST((COALESCE(FEE_REST.STUS,(COALESCE(FEE_SET.STUS,FEE_MSTR.STUS)))) AS VARCHAR(100)))			AS "status",
+    FEE_MSTR.FEE_NA                                                                    AS "feeDescription",
+    (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37479 and entr_cd=COALESCE(FEE_REST.FEE_TYP,(COALESCE(FEE_SET.FEE_TYP,FEE_MSTR.FEE_TYP))))                   AS "type",
+    COALESCE(FEE_REST.EATIN_VAL,(COALESCE(FEE_SET.EATIN_VAL,FEE_MSTR.EATIN_VAL)))                AS "eatin_value",
+    COALESCE(FEE_REST.TKUT_VAL,(COALESCE(FEE_SET.TKUT_VAL,FEE_MSTR.TKUT_VAL)))                   AS "tkut_value",
+    COALESCE(FEE_REST.OTH_VAL,(COALESCE(FEE_SET.OTH_VAL,FEE_MSTR.OTH_VAL)))                      AS "oth_val",
+    COALESCE(FEE_REST.EATIN_TAX_CD,(COALESCE(FEE_SET.EATIN_TAX_CD,FEE_MSTR.EATIN_TAX_CD)))       AS "eatin_tax_cd",
+    COALESCE(FEE_REST.TKUT_TAX_CD,(COALESCE(FEE_SET.TKUT_TAX_CD,FEE_MSTR.TKUT_TAX_CD)))          AS "tkut_tax_cd",
+    COALESCE(FEE_REST.OTH_TAX_CD,(COALESCE(FEE_SET.OTH_TAX_CD,FEE_MSTR.OTH_TAX_CD)))             AS "oth_tax_cd",
+    COALESCE(FEE_REST.EATIN_TAX_RULE,(COALESCE(FEE_SET.EATIN_TAX_RULE,FEE_MSTR.EATIN_TAX_RULE))) AS "eating_tax_rule",
+    COALESCE(FEE_REST.TKUT_TAX_RULE,(COALESCE(FEE_SET.TKUT_TAX_RULE,FEE_MSTR.TKUT_TAX_RULE)))    AS "tkut_tax_rule",
+    COALESCE(FEE_REST.OTH_TAX_RULE,(COALESCE(FEE_SET.OTH_TAX_RULE,FEE_MSTR.OTH_TAX_RULE)))       AS "oth_tax_rule",
+    
+    COALESCE(fee_rest.eatin_tax_entr,(COALESCE(fee_set.eatin_tax_entr,fee_mstr.eatin_tax_entr))) AS eatin_tax_entr,
+    COALESCE(fee_rest.eatin_tax_chn_entr,(COALESCE(fee_set.eatin_tax_chn_entr,fee_mstr.eatin_tax_chn_entr))) AS eatin_tax_chn_entr,  
+   
+    COALESCE(fee_rest.tkut_tax_entr,(COALESCE(fee_set.tkut_tax_entr,fee_mstr.tkut_tax_entr))) as tkut_tax_entr,
+    COALESCE(fee_rest.tkut_tax_chn_entr,(COALESCE(fee_set.tkut_tax_chn_entr,fee_mstr.tkut_tax_chn_entr))) as tkut_tax_chn_entr,
+   
+    COALESCE(FEE_REST.OTH_TAX_ENTR,(COALESCE(FEE_SET.OTH_TAX_ENTR,FEE_MSTR.OTH_TAX_ENTR))) as OTH_TAX_ENTR,
+    COALESCE(fee_rest.oth_tax_chn_entr,(COALESCE(fee_set.oth_tax_chn_entr,fee_mstr.oth_tax_chn_entr))) as oth_tax_chn_entr
+
+  FROM  FEE FEE_MSTR
+  INNER JOIN  FEE FEE_SET
+  ON FEE_SET.FEE_DATA_ID  = FEE_MSTR.FEE_DATA_ID
+  and FEE_MSTR.DLTD_FL     = 0
+  AND FEE_MSTR.MKT_ID      = :mkt_id
+  AND FEE_MSTR.SUB_TYP    = 4011
+  AND :effectiveDate between FEE_MSTR.strt_dt and FEE_MSTR.end_dt
+  AND FEE_SET.SET_id = :pren_set_id
+  AND FEE_SET.DLTD_FL     = 0
+  AND :effectiveDate between FEE_SET.strt_dt and FEE_SET.end_dt
+  LEFT OUTER JOIN FEE FEE_REST
+  ON FEE_REST.FEE_DATA_ID                                     = FEE_SET.FEE_DATA_ID
+  AND FEE_REST.SET_id = :chld_set_id
+  AND FEE_REST.DLTD_FL                                        = 0
+  AND :effectiveDate between FEE_REST.strt_dt and FEE_REST.end_dt
+  WHERE COALESCE(FEE_REST.STUS,(COALESCE(FEE_SET.STUS,FEE_MSTR.STUS))) IN (1,2);
+]]>
+</getFeeDetails>
+
+
+
+
+<getMIGroupDetails>
+<![CDATA[ 
+select 
+ mg.mi_grp_id,
+ mg.mi_grp_cd, 
+ mg.mi_grp_na,
+ mg.stus, 
+ COALESCE((
+      SELECT ML.PKG_GEN_Cd  from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = 90018 and ml.entr_cd =cast(mg.mi_grp_typ as varchar)), ' ') miGrpTypLkpVal ,
+ mg.mi_grp_typ,
+ case when (mg.mi_grp_typ =0 or mg.mi_grp_typ =1)
+ then (select PG.promo_grp_cd 
+FROM PROMO_GRP PG, PROMO_GRP_DTLS PGD
+WHERE PG.PROMO_GRP_ID       = PGD.PROMO_GRP_ID
+AND PG.MKT_ID               = PGD.MKT_ID
+AND PG.DLTD_FL              = 0
+AND PGD.DLTD_FL             = 0
+AND PGD.MI_GRP_ID           = mg.mi_grp_id)
+else -1
+end as promo_grp_code
+from mi_grp mg
+where MG.MKT_ID = :mkt_id 
+	AND MG.DLTD_FL  = 0;
+]]>
+</getMIGroupDetails>
+
+	
+	
+	
+	
+
+<getFlavourSet>
+<![CDATA[
+SELECT 
+flavdata.FLAV_NA,
+flavdata.NOZZLE_ID
+FROM
+(SELECT M.FLAV_ID ,
+M.FLAV_NA,
+coalesce (coalesce (R.Nozzle_Id,S.Nozzle_Id),M.Nozzle_Id) NOZZLE_ID
+FROM (
+(SELECT main.flav_na,
+main.flav_id,
+Main.Nozzle_Id
+FROM FLAV MAIN,
+Sets S
+WHERE S.TYP = 3013
+AND S.MSTR = 1
+AND S.SET_ID=MAIN.SET_ID
+AND S.Mkt_Id = :mkt_id
+AND Main.Dltd_Fl = 0
+AND S.DLTD_FL=0
+)M
+LEFT OUTER JOIN
+(SELECT A.Flav_Id,
+a.Nozzle_Id
+FROM FLAV A
+join rest_data rd on A.SET_ID = rd.pren_set_id
+WHERE rd.rest_id = :rest_id
+and rd.rest_inst_id = :rest_inst_id
+and rd.asn_set_typ='3014'
+and rd.dltd_fl =0
+)S
+ON M.flav_ID = S.flav_ID
+LEFT OUTER JOIN
+(SELECT A.Flav_Id,
+a.Nozzle_Id
+FROM FLAV A
+join rest_data rd on A.SET_ID = rd.cusm_set_id
+WHERE rd.rest_id = :rest_id
+and rd.rest_inst_id = :rest_inst_id
+and rd.asn_set_typ='3014'
+and rd.dltd_fl =0
+)R
+ON M.Flav_Id = R.Flav_Id)
+) as flavdata ORDER BY Lower(flavdata.Flav_Na);
+]]>
+</getFlavourSet>		
+
+<getIngriedientGroupDetails>
+	<![CDATA[ 
+	SELECT MT.INGR_GRP_NA INGR_GRP_NAME,
+        COALESCE(RT.SEL_ONLY_1, MT.SEL_ONLY_1) MUTUALLY_EXCLUSIVE,
+		COALESCE(RT.MIN_QT, MT.MIN_QT)  MIN_QTY,
+        COALESCE(RT.MAX_QT, MT.MAX_QT) MAX_QTY,
+		COALESCE(RT.CHARGE_THRESHOLD, MT.CHARGE_THRESHOLD) CHARGETHRESHOLD 
+        FROM (SELECT INGR_GRP_ID, INGR_GRP_NA, SEL_ONLY_1, MIN_QT, MAX_QT,CHARGE_THRESHOLD  
+        FROM INGR_GRP M WHERE M.SET_ID = (SELECT SET_ID FROM SETS WHERE TYP=3023 AND MSTR=1 AND DLTD_FL=0 AND 
+        MKT_ID=:marketId AND CRTR_NODE_ID=(SELECT NODE_ID FROM MKT_DATA WHERE MKT_ID=:marketId AND DLTD_FL=0)) 
+        AND M.DLTD_FL=0 AND M.MKT_ID=:marketId) MT
+		LEFT OUTER JOIN
+		(SELECT INGR_GRP_ID, INGR_GRP_NA, SEL_ONLY_1, MIN_QT, MAX_QT, CHARGE_THRESHOLD  FROM INGR_GRP R WHERE 
+        R.SET_ID = (SELECT SET_ID FROM SETS WHERE TYP=3023 AND MSTR=0 AND DLTD_FL=0 AND MKT_ID=:marketId AND
+        CRTR_NODE_ID=:nodeId) AND R.DLTD_FL=0 AND R.MKT_ID=:marketId) RT
+		ON
+		MT.INGR_GRP_ID = RT.INGR_GRP_ID
+	]]>
+</getIngriedientGroupDetails>
+
+<getDepositDetails>
+<![CDATA[
+SELECT 
+    DPST_MSTR.DPST_DATA_ID                                                                AS "dataId",
+    DPST_MSTR.DPST_ID                                                                     AS "depositCode",
+    (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37478 and entr_cd=CAST((COALESCE(DPST_REST.STUS,(COALESCE(DPST_SET.STUS,DPST_MSTR.STUS))))AS VARCHAR(100)))	AS "status",
+    DPST_MSTR.DPST_NA                                                                     AS "DepositDescription",
+    (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37479 and entr_cd=COALESCE(DPST_REST.DPST_TYP,(COALESCE(DPST_SET.DPST_TYP,DPST_MSTR.DPST_TYP))))	AS "type",
+    COALESCE(DPST_REST.EATIN_VAL,(COALESCE(DPST_SET.EATIN_VAL,DPST_MSTR.EATIN_VAL)))                AS "eatin_value",
+    COALESCE(DPST_REST.TKUT_VAL,(COALESCE(DPST_SET.TKUT_VAL,DPST_MSTR.TKUT_VAL)))                   AS "tkut_value",
+    COALESCE(DPST_REST.OTH_VAL,(COALESCE(DPST_SET.OTH_VAL,DPST_MSTR.OTH_VAL)))                      AS "oth_val",
+    COALESCE(DPST_REST.EATIN_TAX_CD,(COALESCE(DPST_SET.EATIN_TAX_CD,DPST_MSTR.EATIN_TAX_CD)))       AS "eatin_tax_cd",
+    COALESCE(DPST_REST.TKUT_TAX_CD,(COALESCE(DPST_SET.TKUT_TAX_CD,DPST_MSTR.TKUT_TAX_CD)))          AS "tkut_tax_cd",
+    COALESCE(DPST_REST.OTH_TAX_CD,(COALESCE(DPST_SET.OTH_TAX_CD,DPST_MSTR.OTH_TAX_CD)))             AS "oth_tax_cd",
+    COALESCE(DPST_REST.EATIN_TAX_RULE,(COALESCE(DPST_SET.EATIN_TAX_RULE,DPST_MSTR.EATIN_TAX_RULE))) AS "eating_tax_rule",
+    COALESCE(DPST_REST.TKUT_TAX_RULE,(COALESCE(DPST_SET.TKUT_TAX_RULE,DPST_MSTR.TKUT_TAX_RULE)))    AS "tkut_tax_rule",
+    COALESCE(DPST_REST.OTH_TAX_RULE,(COALESCE(DPST_SET.OTH_TAX_RULE,DPST_MSTR.OTH_TAX_RULE)))       AS "oth_tax_rule",
+    
+    COALESCE(dpst_rest.eatin_tax_entr,(COALESCE(dpst_set.eatin_tax_entr,dpst_mstr.eatin_tax_entr)))   AS "eatin_tax_entr",
+    COALESCE(dpst_rest.eatin_tax_chn_entr,(COALESCE(dpst_set.eatin_tax_chn_entr,dpst_mstr.eatin_tax_chn_entr)))   AS "eatin_tax_chn_entr",
+    
+    COALESCE(DPST_REST.TKUT_TAX_ENTR,(COALESCE(DPST_SET.TKUT_TAX_ENTR,DPST_MSTR.TKUT_TAX_ENTR)))  AS "tkut_tax_entr",
+    COALESCE(DPST_REST.TKUT_TAX_CHN_ENTR,(COALESCE(DPST_SET.TKUT_TAX_CHN_ENTR,DPST_MSTR.TKUT_TAX_CHN_ENTR)))  AS "tkut_tax_chn_entr",
+    
+    COALESCE(dpst_rest.oth_tax_entr,(COALESCE(dpst_set.oth_tax_entr,dpst_mstr.oth_tax_entr)))    AS "oth_tax_entr",   
+    COALESCE(dpst_rest.oth_tax_chn_entr,(COALESCE(dpst_set.oth_tax_chn_entr,dpst_mstr.oth_tax_chn_entr)))    AS "oth_tax_chn_entr"
+   
+  FROM  DPST DPST_MSTR
+  INNER JOIN  DPST DPST_SET
+  ON DPST_SET.DPST_DATA_ID  = DPST_MSTR.DPST_DATA_ID
+  and DPST_MSTR.DLTD_FL     = 0
+  AND DPST_MSTR.MKT_ID      = :mkt_id
+  AND DPST_MSTR.SUB_TYP    = 4021
+  AND :effectiveDate between DPST_MSTR.strt_dt and DPST_MSTR.end_dt
+  AND DPST_SET.SET_id = :pren_set_id
+  AND DPST_SET.DLTD_FL     = 0
+  AND :effectiveDate between DPST_SET.strt_dt and DPST_SET.end_dt
+  LEFT OUTER JOIN DPST DPST_REST
+  ON DPST_REST.DPST_DATA_ID                                     = DPST_SET.DPST_DATA_ID
+  AND DPST_REST.SET_id = :chld_set_id
+  AND DPST_REST.DLTD_FL                                        = 0
+  AND :effectiveDate between DPST_REST.strt_dt and DPST_REST.end_dt
+  WHERE COALESCE(DPST_REST.STUS,(COALESCE(DPST_SET.STUS,DPST_MSTR.STUS))) IN (1,2);
+]]>
+</getDepositDetails>
+
+ <getLocalizationSets>
+        <![CDATA[   SELECT pren_set_id,
+                           cusm_set_id
+                    FROM REST_DATA
+                    WHERE REST_ID = :restId
+                      AND REST_INST_ID = :restInstId
+                       AND asn_set_typ = :asnSetType
+                       AND MKT_ID=:marketId
+                      AND dltd_fl = 0]]>
+    </getLocalizationSets>
+    <getBusinessLimit>
+    <![CDATA[SELECT
+case WHEN CASE WHEN COALESCE(c.skim_tm_lmt, p.skim_tm_lmt) = -999 THEN NULL  WHEN COALESCE(c.skim_tm_lmt, p.skim_tm_lmt) IS NULL THEN NULL ELSE COALESCE(C.SKIM_TM_LMT, P.SKIM_TM_LMT) END IS NOT NULL
+THEN CASE WHEN COALESCE(c.skim_tm_lmt, p.skim_tm_lmt) = -999 THEN NULL  WHEN COALESCE(c.skim_tm_lmt, p.skim_tm_lmt) IS NULL THEN NULL ELSE COALESCE(c.skim_tm_lmt, p.skim_tm_lmt) END
+end as SKIM_TM_LMT,
+CASE WHEN CASE when COALESCE(c.SKIM_AM_LMT, p.SKIM_AM_LMT) = -999 THEN NULL WHEN COALESCE(c.SKIM_AM_LMT, p.SKIM_AM_LMT) IS NULL THEN NULL ELSE COALESCE (C.SKIM_AM_LMT, P.SKIM_AM_LMT) END IS NOT NULL
+then CASE WHEN COALESCE(c.SKIM_AM_LMT, p.SKIM_AM_LMT) = -999 THEN NULL  WHEN COALESCE(c.SKIM_AM_LMT, p.SKIM_AM_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.skim_am_lmt, p.skim_am_lmt) ,'99999990.99')) END
+end as SKIM_AM_LMT,
+case WHEN CASE when COALESCE(c.mgr_mode_tm_lmt, p.mgr_mode_tm_lmt) = -999 THEN NULL  WHEN COALESCE(c.mgr_mode_tm_lmt, p.mgr_mode_tm_lmt) IS NULL THEN NULL ELSE COALESCE(C.MGR_MODE_TM_LMT, P.MGR_MODE_TM_LMT) END IS NOT NULL
+then case WHEN COALESCE(c.mgr_mode_tm_lmt, p.mgr_mode_tm_lmt) = -999 THEN NULL  WHEN COALESCE(c.mgr_mode_tm_lmt, p.mgr_mode_tm_lmt) IS NULL THEN NULL  ELSE COALESCE(c.mgr_mode_tm_lmt, p.mgr_mode_tm_lmt) END
+end  as MGR_MODE_TM_LMT,
+TRIM(TO_CHAR(COALESCE(COALESCE (c.high_am_sale_lmt, p.high_am_sale_lmt),0) ,'99999990.99')) as high_am_sale_lmt,
+Coalesce(Coalesce (C.High_Qt_Sale_Lmt, P.High_Qt_Sale_Lmt),0) as High_Qt_Sale_Lmt,
+TRIM(TO_CHAR(COALESCE(COALESCE (c.auto_rcpt_prnt_am, p.auto_rcpt_prnt_am),0),'99999990.99'))  as auto_rcpt_prnt_am,
+COALESCE(COALESCE (c.fc_otd_tm_over, p.fc_otd_tm_over),0) as fc_otd_tm_over,
+COALESCE(COALESCE (c.fc_cshrng_tm_over, p.fc_cshrng_tm_over),0) as fc_cshrng_tm_over,
+CASE WHEN CASE when COALESCE(c.fc_str_tm_over, p.fc_str_tm_over) = -999 THEN NULL WHEN COALESCE(c.fc_str_tm_over, p.fc_str_tm_over) IS NULL THEN NULL ELSE COALESCE(C.FC_STR_TM_OVER, P.FC_STR_TM_OVER) END IS NOT NULL
+then  case WHEN COALESCE(c.fc_str_tm_over, p.fc_str_tm_over) = -999 THEN NULL  WHEN COALESCE(c.fc_str_tm_over, p.fc_str_tm_over) IS NULL THEN NULL  ELSE COALESCE(c.fc_str_tm_over, p.fc_str_tm_over) END
+end as FC_STR_TM_OVER,
+case WHEN case WHEN COALESCE (C.DT_WIN_1_TM_OVER,P.DT_WIN_1_TM_OVER)  = -999 THEN NULL WHEN COALESCE (C.DT_WIN_1_TM_OVER,P.DT_WIN_1_TM_OVER)  IS NULL THEN NULL ELSE COALESCE(C.DT_WIN_1_TM_OVER, P.DT_WIN_1_TM_OVER) END IS NOT NULL
+then case WHEN COALESCE (c.DT_WIN_1_TM_OVER,p.DT_WIN_1_TM_OVER)  = -999 THEN NULL WHEN COALESCE(c.DT_WIN_1_TM_OVER,p.DT_WIN_1_TM_OVER)  IS NULL THEN NULL ELSE COALESCE(c.DT_WIN_1_TM_OVER, p.DT_WIN_1_TM_OVER) end 
+end as dt_win_1_tm_over,
+case WHEN case WHEN COALESCE (C.DT_WIN_2_TM_OVER,P.DT_WIN_2_TM_OVER)  = -999 THEN NULL WHEN COALESCE (C.DT_WIN_2_TM_OVER,P.DT_WIN_2_TM_OVER)  IS NULL THEN null ELSE COALESCE(C.DT_WIN_2_TM_OVER, P.DT_WIN_2_TM_OVER) END IS NOT NULL
+then case WHEN COALESCE (c.dt_win_2_tm_over,p.dt_win_2_tm_over)  = -999 THEN NULL WHEN COALESCE(c.dt_win_2_tm_over,p.dt_win_2_tm_over)  IS NULL THEN NULL ELSE COALESCE(c.dt_win_2_tm_over, p.dt_win_2_tm_over) end 
+end as dt_win_2_tm_over,
+case WHEN CASE when COALESCE(c.dt_held_tm_over, p.dt_held_tm_over) = -999 THEN NULL  WHEN COALESCE(c.dt_held_tm_over, p.dt_held_tm_over) IS NULL THEN NULL ELSE COALESCE(C.DT_HELD_TM_OVER, P.DT_HELD_TM_OVER) END IS NOT NULL
+then  case WHEN COALESCE(c.dt_held_tm_over, p.dt_held_tm_over) = -999 THEN NULL  WHEN COALESCE(c.dt_held_tm_over, p.dt_held_tm_over) IS NULL THEN NULL  ELSE COALESCE(c.dt_held_tm_over, p.dt_held_tm_over) END
+end as DT_HELD_TM_OVER,
+ (SELECT le.PKG_GEN_CD
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  WHERE ln.lex_id =1397 AND le.dltd_fl = 0 and le.Entr_cd =COALESCE(c.rduc_vldn_mode, p.rduc_vldn_mode)) as rduc_vldn_mode,
+  (SELECT le.PKG_GEN_CD
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  WHERE ln.lex_id =2320 AND le.dltd_fl = 0 and le.Entr_cd =COALESCE(c.promo_vldn_mode, p.promo_vldn_mode)) as promo_vldn_mode,
+TRIM(TO_CHAR(COALESCE(COALESCE (c.bfr_tot_amunt, p.bfr_tot_amunt),0),'99999990')) as bfr_tot_amunt,
+TRIM(TO_CHAR(COALESCE(COALESCE (c.am_aft_tot, p.am_aft_tot),0),'99999990.99'))  as am_aft_tot,
+COALESCE(COALESCE (c.qt_aft_tot,p.qt_aft_tot),0) as qt_aft_tot,
+to_char(to_timestamp (COALESCE (c.WKDY_BRKF_STRT_TM, p.WKDY_BRKF_STRT_TM), 'hh24:mi'),'hh24:mi') as WKDY_BRKF_STRT_TM,
+to_char(to_timestamp(COALESCE (c.wkdy_brkf_stop_tm, p.wkdy_brkf_stop_tm), 'hh24:mi'),'hh24:mi') as wkdy_brkf_stop_tm,
+to_char(to_timestamp(COALESCE (c.wknd_brkf_strt_tm, p.wknd_brkf_strt_tm), 'hh24:mi'),'hh24:mi') as wknd_brkf_strt_tm,
+to_char(to_timestamp(COALESCE (c.wknd_brkf_stop_tm, p.wknd_brkf_stop_tm), 'hh24:mi'),'hh24:mi') as wknd_brkf_stop_tm,
+Coalesce (C.Blok_Tm, P.Blok_Tm) as Blok_Tm,
+TRIM(To_CHAR(COALESCE(COALESCE (c.init_flt_lmt, p.init_flt_lmt),0),'99999990.99'))  as init_flt_lmt,
+TRIM(TO_CHAR(Coalesce(Coalesce (nullif(C.Futr_Dy_Open_Lmt,0), nullif(P.Futr_Dy_Open_Lmt,0),0)),'99999990')) as Futr_Dy_Open_Lmt,
+TRIM(TO_CHAR(COALESCE(COALESCE (c.pety_cash_am_lmt, p.pety_cash_am_lmt),0),'99999990.99'))  as pety_cash_am_lmt,
+CASE WHEN COALESCE(c.PRM_ITM_QTY_LMT, p.PRM_ITM_QTY_LMT)  = -999 THEN NULL WHEN COALESCE(c.PRM_ITM_QTY_LMT, p.PRM_ITM_QTY_LMT) IS NULL THEN NULL ELSE COALESCE(c.PRM_ITM_QTY_LMT, p.PRM_ITM_QTY_LMT) END  as PRM_ITM_QTY_LMT,
+(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37473 and entr_cd= COALESCE(c.BP_PRM_PI_QA_LMT, p.BP_PRM_PI_QA_LMT)) as BP_PRM_PI_QA_LMT,
+(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37473 and entr_cd=  COALESCE(c.BP_INDV_DISC_AM_LMT, p.BP_INDV_DISC_AM_LMT)) as BP_INDV_DISC_AM_LMT,
+case WHEN CASE WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) END  IS NOT NULL
+then CASE  WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) = -999 THEN NULL WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) end 
+end as DISC_QT_LMT,
+case WHEN case WHEN COALESCE (c.CPN_QT_LMT, p.CPN_QT_LMT)  = -999 THEN NULL WHEN COALESCE (c.CPN_QT_LMT, p.CPN_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) END  IS NOT NULL
+then CASE WHEN COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT)  = -999 THEN NULL WHEN COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) IS NULL THEN NULL ELSE COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) END
+end as CPN_QT_LMT,
+case  WHEN CASE WHEN COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT)  IS NULL THEN NULL ELSE COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT) END  IS NOT NULL
+then CASE WHEN COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT)  IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT),'99999990.99')) END
+end as DISC_AM_LMT,
+case WHEN CASE  WHEN COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) = -999 THEN NULL WHEN COALESCE(c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) IS NULL THEN NULL ELSE COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) END IS NOT NULL
+then CASE WHEN COALESCE  (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) = -999 THEN NULL WHEN COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT),'99999990.99')) END
+end as NO_TAX_SALES_AM_LMT,
+CASE WHEN CASE WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT)  = -999 THEN NULL WHEN COALESCE(c.AM_BEF_TOT, p.AM_BEF_TOT)  IS NULL THEN NULL ELSE COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) END IS NOT NULL
+then CASE  WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) = -999 THEN NULL WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT),'99999990.99')) END
+end as AM_BEF_TOT,
+CASE WHEN CASE WHEN COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.CPN_AM_LMT, p.CPN_AM_LMT) IS NULL THEN NULL ELSE COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT) END IS NOT NULL
+then CASE  WHEN COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT) = -999 THEN NULL WHEN COALESCE(c.CPN_AM_LMT, p.CPN_AM_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT),'99999990.99')) end
+end as CPN_AM_LMT,
+CASE WHEN CASE WHEN COALESCE (c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT)  = -999 THEN NULL WHEN COALESCE(c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT) IS NULL THEN NULL ELSE COALESCE (c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT) END IS NOT NULL
+then CASE  WHEN COALESCE (c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT) = -999 THEN NULL WHEN COALESCE (c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT) IS NULL THEN NULL ELSE COALESCE (c.CREW_TRED_DAILY_LIMIT, p.CREW_TRED_DAILY_LIMIT) END
+end as CREW_TRED_DAILY_LIMIT,
+CASE WHEN CASE WHEN COALESCE (c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT)  = -999 THEN NULL WHEN COALESCE(c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT) IS NULL THEN NULL ELSE COALESCE (c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT) END IS NOT NULL
+then CASE WHEN COALESCE (c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT)  = -999 THEN NULL WHEN COALESCE(c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT) IS NULL THEN NULL ELSE COALESCE (c.CREW_PROMO_DAILY_LIMIT, p.CREW_PROMO_DAILY_LIMIT) END
+end as CREW_PROMO_DAILY_LIMIT,
+case WHEN COALESCE(c.DAILY_LIMIT_EXCLUSION_LIST, p.DAILY_LIMIT_EXCLUSION_LIST) IS NOT NULL
+THEN Coalesce (C.DAILY_LIMIT_EXCLUSION_LIST, P.DAILY_LIMIT_EXCLUSION_LIST)
+end as DAILY_LIMIT_EXCLUSION_LIST,
+CASE WHEN COALESCE (C.PRM_ITM_AMT_LMT, P.PRM_ITM_AMT_LMT)  = -999 THEN NULL WHEN COALESCE(C.PRM_ITM_AMT_LMT, P.PRM_ITM_AMT_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE(C.PRM_ITM_AMT_LMT,P.PRM_ITM_AMT_LMT), '99999990.99')) END as PRM_ITM_AMT_LMT,
+COALESCE(COALESCE (c.init_flt_amt, p.init_flt_amt),0) as init_flt_amt
+    FROM
+      (SELECT *
+      FROM REST_BUSN_LMTS RBL
+      WHERE RBL.set_id       = :parentSetId
+     AND :effectiveDate  between rbl.strt_dt and rbl.end_dt
+      AND COALESCE(RBL.DLTD_FL ,0) = 0
+      ) p
+    LEFT OUTER JOIN
+      (SELECT *
+      FROM REST_BUSN_LMTS RBL
+      WHERE RBL.SET_ID       = :childSetId
+      AND COALESCE(RBL.DLTD_FL ,0) = 0
+      ) c
+    ON 1= 1]]>
+  </getBusinessLimit>
+  
+  <getHotBusinessLimit>
+    <![CDATA[SELECT
+Case Coalesce(C.Mgr_Mode_Tm_Lmt, P.Mgr_Mode_Tm_Lmt)    When -999 Then Null Else Coalesce(C.Mgr_Mode_Tm_Lmt, P.Mgr_Mode_Tm_Lmt)  End
+as Mgr_Mode_Tm_Lmt,
+TRIM(TO_CHAR(CASE COALESCE (c.high_am_sale_lmt, p.high_am_sale_lmt)  WHEN -999 THEN NULL ELSE COALESCE (c.high_am_sale_lmt, p.high_am_sale_lmt)  END,'99999990.99')) 
+as high_am_sale_lmt,
+CASE COALESCE (c.high_qt_sale_lmt, p.high_qt_sale_lmt) WHEN -999 THEN NULL ELSE COALESCE (c.high_qt_sale_lmt, p.high_qt_sale_lmt)  END 
+as high_qt_sale_lmt,
+(SELECT le.PKG_GEN_CD
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  WHERE ln.lex_id =1397 AND le.dltd_fl = 0 and le.Entr_cd =COALESCE(c.rduc_vldn_mode, p.rduc_vldn_mode)) 
+as rduc_vldn_mode,
+TRIM(TO_CHAR(CASE COALESCE (c.bfr_tot_amunt, p.bfr_tot_amunt)  WHEN -999 THEN NULL ELSE COALESCE (c.bfr_tot_amunt, p.bfr_tot_amunt)  END,'99999990'))
+as bfr_tot_amunt,
+TRIM(TO_CHAR(CASE COALESCE (c.am_aft_tot, p.am_aft_tot) WHEN -999 THEN NULL ELSE COALESCE (c.am_aft_tot, p.am_aft_tot)  END,'99999990.99')) 
+as am_aft_tot,
+CASE COALESCE (c.qt_aft_tot, p.qt_aft_tot)  WHEN -999 THEN NULL ELSE COALESCE (c.qt_aft_tot, p.qt_aft_tot)  END
+as qt_aft_tot,
+Case Coalesce(C.Prm_Itm_Qty_Lmt, P.Prm_Itm_Qty_Lmt) When -999 Then Null Else Coalesce(C.Prm_Itm_Qty_Lmt, P.Prm_Itm_Qty_Lmt)  End 
+as Prm_Itm_Qty_Lmt,
+(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37473 and entr_cd= COALESCE(c.BP_PRM_PI_QA_LMT, p.BP_PRM_PI_QA_LMT)) 
+as BP_PRM_PI_QA_LMT,
+(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37473 and entr_cd=  COALESCE(c.BP_INDV_DISC_AM_LMT, p.BP_INDV_DISC_AM_LMT)) 
+as BP_INDV_DISC_AM_LMT,
+case WHEN CASE WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) END  IS NOT NULL
+then CASE  WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) = -999 THEN NULL WHEN COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.DISC_QT_LMT, p.DISC_QT_LMT) end 
+end as DISC_QT_LMT,
+case WHEN case WHEN COALESCE (c.CPN_QT_LMT, p.CPN_QT_LMT)  = -999 THEN NULL WHEN COALESCE (c.CPN_QT_LMT, p.CPN_QT_LMT)  IS NULL THEN NULL ELSE COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) END  IS NOT NULL
+then CASE WHEN COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT)  = -999 THEN NULL WHEN COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) IS NULL THEN NULL ELSE COALESCE(c.CPN_QT_LMT, p.CPN_QT_LMT) END
+end as CPN_QT_LMT,
+case  WHEN CASE WHEN COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT)  IS NULL THEN NULL ELSE COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT) END  IS NOT NULL
+then CASE WHEN COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT)  IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.DISC_AM_LMT, p.DISC_AM_LMT),'99999990.99')) END
+end as DISC_AM_LMT,
+case WHEN CASE  WHEN COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) = -999 THEN NULL WHEN COALESCE(c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) IS NULL THEN NULL ELSE COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) END IS NOT NULL
+then CASE WHEN COALESCE  (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) = -999 THEN NULL WHEN COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.NO_TAX_SALES_AM_LMT, p.NO_TAX_SALES_AM_LMT),'99999990.99')) END
+end as NO_TAX_SALES_AM_LMT,
+CASE WHEN CASE WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT)  = -999 THEN NULL WHEN COALESCE(c.AM_BEF_TOT, p.AM_BEF_TOT)  IS NULL THEN NULL ELSE COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) END IS NOT NULL
+then CASE  WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) = -999 THEN NULL WHEN COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.AM_BEF_TOT, p.AM_BEF_TOT),'99999990.99')) END
+end as AM_BEF_TOT,
+CASE WHEN CASE WHEN COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT)  = -999 THEN NULL WHEN COALESCE(c.CPN_AM_LMT, p.CPN_AM_LMT) IS NULL THEN NULL ELSE COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT) END IS NOT NULL
+then CASE  WHEN COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT) = -999 THEN NULL WHEN COALESCE(c.CPN_AM_LMT, p.CPN_AM_LMT) IS NULL THEN NULL ELSE TRIM(TO_CHAR(COALESCE (c.CPN_AM_LMT, p.CPN_AM_LMT),'99999990.99')) end
+end as CPN_AM_LMT,
+TRIM(TO_CHAR(CASE COALESCE(C.PRM_ITM_AMT_LMT, P.PRM_ITM_AMT_LMT)   WHEN -999 THEN NULL ELSE COALESCE(C.PRM_ITM_AMT_LMT, P.PRM_ITM_AMT_LMT)  END,'99999990.99'))
+as PRM_ITM_AMT_LMT
+    FROM
+      (SELECT *
+      FROM rest_hhot_busn_lmts RBL
+      WHERE RBL.set_id       = :parentSetId
+      AND :effectiveDate  between RBL.strt_dt and RBL.end_dt
+      AND COALESCE(RBL.DLTD_FL ,0) = 0
+      ) p
+    LEFT OUTER JOIN
+      (SELECT *
+      FROM rest_hhot_busn_lmts RBL
+      WHERE RBL.SET_ID       = :customSetId
+      AND :effectiveDate  between RBL.strt_dt and RBL.end_dt
+      AND COALESCE(RBL.DLTD_FL ,0) = 0
+      ) c
+    ON 1= 1]]>
+  </getHotBusinessLimit>
+  
+  <getSizeSelection>
+  <![CDATA[SELECT coalesce (DIM.CD) CD,
+                    coalesce (DIM.NA,'') NA
+			    FROM DIMN_NA DIM
+			    WHERE DIM.MKT_ID = :mkt_id
+			    AND DIM.DLTD_FL  =0;
+	]]>
+  </getSizeSelection>
+  
+  <getPopulateDrinkVol>
+  <![CDATA[SELECT drnk_vol_na,
+	drnk_vol_code
+    FROM drnk_vol
+    WHERE mkt_id = :mkt_id
+    AND dltd_fl  = 0
+	order by LOWER(drnk_vol_na);
+	]]>
+  </getPopulateDrinkVol>
+  
+
+
+
+<getPromotionGroupDetails>
+  <![CDATA[SELECT PG.PROMO_GRP_ID, PG.PROMO_GRP_CD, PG.PROMO_GRP_NA,
+	CASE
+		WHEN PG.STUS = 1 THEN
+			'ACTIVE'
+		WHEN PG.STUS = 0 THEN
+			'INACTIVE'
+		END AS STUS
+	,
+    coalesce((select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =coalesce((SELECT lex_id
+      FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :PARAM_MKT_ID AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90019 AND l.DLTD_FL = 0 limit 1
+     ),0) and entr_cd=cast (PG.PROMO_GRP_MODL as varchar(10))),'') as v_promoGrp_model,
+     case when  PG.PROMO_GRP_MODL <> 1 then
+     coalesce((select STRING_AGG(pkg_gen_cd, ',') from mw_pkggen_lkup_cd mplc where lex_id =coalesce((SELECT lex_id
+      FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :PARAM_MKT_ID AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90020 AND l.DLTD_FL = 0 limit 1
+     ),0) and entr_cd=ANY(string_to_array((SELECT STRING_AGG(cast (promo_grp_typ_id as varchar(10)), ',') FROM PROMO_GRP_TYP_DTL PGTD WHERE PGTD.PROMO_GRP_ID=PG.PROMO_GRP_ID and PGTD.DLTD_FL=0), ','))
+	),'') else null end as v_promogrp_types
+	FROM PROMO_GRP PG
+  WHERE PG.MKT_ID   = :PARAM_MKT_ID
+  AND PG.DLTD_FL    = 0]]>
+  </getPromotionGroupDetails>
+
+
+  <getTaxDefinition>
+  <![CDATA[SELECT 
+   COALESCE(r.LGL_NA,'') as LGL_NA,
+   COALESCE(r.RCPT_HDR,'') as RCPT_HDR,
+   COALESCE(r.RCPT_FOTR,'') as RCPT_FOTR,
+   COALESCE(r.WLCM_MSG,'') as WLCM_MSG,
+   (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =1893 and entr_cd=  COALESCE(c.MENU_PRC_BSIS, p.MENU_PRC_BSIS)) as MENU_PRC_BSIS,
+ 	(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =(SELECT  lex_id FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =1284 AND l.DLTD_FL = 0) and entr_cd=   COALESCE(c.CALC_TYP, p.CALC_TYP)) as CALC_TYP,
+    case COALESCE(COALESCE(c.DSPL_TAX_TO_CUST, p.DSPL_TAX_TO_CUST),0) when 1 then 'true' else 'false' end as DSPL_TAX_TO_CUST,
+    (case COALESCE(COALESCE(c.DSPL_TAX_ON_SLS_PNL, p.DSPL_TAX_ON_SLS_PNL),0) when 1 then 'true' else 'false' end) as DSPL_TAX_ON_SLS_PNL,
+    case  COALESCE(COALESCE(c.DSPL_TAX_ON_RCPT, p.DSPL_TAX_ON_RCPT),0) when 1 then 'true' else 'false' end as DSPL_TAX_ON_RCPT,
+    CASE COALESCE(c.GTO_PROMO, p.GTO_PROMO) WHEN 1 THEN  'GrandTotalOption' end as GTO_PROMO,
+    CASE COALESCE(c.GTO_WASTE, p.GTO_WASTE) WHEN 1 THEN  'GrandTotalOption' end as GTO_WASTE,
+    CASE COALESCE(c.GTO_EMP_MEAL, p.GTO_EMP_MEAL) WHEN 1 THEN  'GrandTotalOption' end as GTO_EMP_MEAL,
+    CASE COALESCE(c.GTO_MAN_MEAL, p.GTO_MAN_MEAL) WHEN 1 THEN  'GrandTotalOption' end as GTO_MAN_MEAL,
+    CASE COALESCE(c.GTO_REFUND, p.GTO_REFUND) WHEN 1 THEN  'GrandTotalOption' end as GTO_REFUND,
+    CASE COALESCE(c.GTO_VOID, p.GTO_VOID) WHEN 1 THEN  'GrandTotalOption' end as GTO_VOID,
+    CASE COALESCE(c.GTO_GT, p.GTO_GT) WHEN 1 THEN  'GrandTotalOption' end as GTO_GT,
+    CASE COALESCE(c.GTO_VOID_ITEM, p.GTO_VOID_ITEM) WHEN 1 THEN  'GrandTotalOption' end as GTO_VOID_ITEM,
+    CASE COALESCE(c.GTO_VOID_SALE, p.GTO_VOID_SALE) WHEN 1 THEN  'GrandTotalOption' end as GTO_VOID_SALE,
+    CASE COALESCE(c.GTO_VOID_DISC, p.GTO_VOID_DISC) WHEN 1 THEN  'GrandTotalOption' end as GTO_VOID_DISC,
+    CASE COALESCE(c.GTO_VOID_GIFT, p.GTO_VOID_GIFT) WHEN 1 THEN  'GrandTotalOption' end as GTO_VOID_GIFT,
+    CASE COALESCE(c.GTO_OTH_RCPT, p.GTO_OTH_RCPT) WHEN 1 THEN  'GrandTotalOption' end as GTO_OTH_RCPT,
+    CASE COALESCE(c.GTO_COUPONS, p.GTO_COUPONS) WHEN 1 THEN  'GrandTotalOption' end as GTO_COUPONS
+  from  
+    (select * from rest re where 
+    re.rest_id = :restId and re.rest_inst_id = :restInstId) r
+    cross join
+  (select * from REST_TAX_DEFN rtd
+    WHERE rtd.SET_ID       = :parentSetId
+   and :effectiveDate between rtd.strt_dt and rtd.end_dt
+    AND COALESCE(rtd.DLTD_FL ,0) = 0
+    ) p
+     LEFT OUTER join
+     (select * from REST_TAX_DEFN rtd
+    WHERE rtd.SET_ID       = :childSetId
+    AND COALESCE(rtd.DLTD_FL ,0) = 0
+    ) c 
+    
+  ON 1 = 1]]> 
+  </getTaxDefinition>
+
+  
+  <getRoutingSetIdsforProduction>
+  <![CDATA[select coalesce(PROD_RTNG_SET,'') PROD_RTNG_SET,
+	    coalesce(Psntn_Rtng_Set,'') PSNTN_RTNG_SET,
+	    coalesce(RTM_PROD_RTNG_SET::NUMERIC,0) RTM_PROD_RTNG_SET from rest 
+	    where rest_id=:restId 
+	    AND STATUS = 1
+	    AND rest_inst_id=:restInstId  
+	    AND mkt_Id=:marketId 
+	    AND DLTD_FL  = 0]]>
+  </getRoutingSetIdsforProduction>
+  
+  <getDefaultRestLocaleId>
+  <![CDATA[SELECT coalesce (CUST.Lang_Id,MAST.Lang_Id) lang_id, coalesce (CUST.CTRY_ID,MAST.CTRY_ID) ctry_id FROM (
+            Select Lang_Id, CTRY_ID,'A' as cust_fl From Rest_Lclz_Info  Where Set_Id = :prenSetId And
+            current_date Between Strt_Dt And End_Dt  And Dltd_Fl = 0 and mkt_id=:marketId
+        ) MAST left outer join
+        (Select Lang_Id, CTRY_ID, 'C' As Cust_Fl From Rest_Lclz_Info  Where Set_Id = :chldSetId  And Dltd_Fl = 0 and mkt_id=:marketId) CUST
+       ON 1=1]]>
+  </getDefaultRestLocaleId>
+  
+  <getNameKVSVolumeProductionDetails>
+  <![CDATA[
+  SELECT distinct rtng_pkg_table_typ, que_id,mirr_que_id,
+  		CASE
+  			WHEN rtng_pkg_table_typ = 'VOLUME_TABLE'
+  			THEN (SELECT na FROM prod_rtng_vol WHERE vol_id = rtng_pkg.vol_id)
+			ELSE coalesce (MAX(CASE
+									 WHEN rest_lcl.lex_id = rtng_pkg.na_lex_id	
+									 THEN rest_lcl.trnsltd_val  END) over (partition BY na_lex_id),
+						   MAX(CASE
+						   			WHEN mkt_lcl.lex_id = rtng_pkg.na_lex_id
+						   			THEN mkt_lcl.trnsltd_val  END) over (partition BY na_lex_id))  END na,
+			coalesce (MAX( CASE
+							WHEN rest_lcl.lex_id = rtng_pkg.shrt_na_lex_id
+							THEN rest_lcl.trnsltd_val END) over (partition BY shrt_na_lex_id), 
+					  MAX( CASE
+					  		WHEN mkt_lcl.lex_id = rtng_pkg.shrt_na_lex_id
+							THEN mkt_lcl.trnsltd_val  END) over (partition BY shrt_na_lex_id)) shrt_na,
+	  typ,
+	  rte_id,
+	  rtng_prod_type,
+	  PATH,
+	  DEF_VOL,
+	  na_lex_id,
+	  shrt_na_lex_id,
+	  rtng_pkg.vol_id
+		FROM RTNG_PKG rtng_pkg
+		LEFT OUTER JOIN lclz mkt_lcl
+		ON mkt_lcl.lcle_id  = :defaultMktLocale
+		AND mkt_lcl.lex_id IN (rtng_pkg.na_lex_id,rtng_pkg.shrt_na_lex_id)
+		LEFT OUTER JOIN lclz rest_lcl
+		ON rest_lcl.lcle_id  = :defaultRestLocale
+		AND rest_lcl.lex_id IN (rtng_pkg.na_lex_id,rtng_pkg.shrt_na_lex_id)
+		AND rest_lcl.lex_id  = mkt_lcl.lex_id
+		WHERE RTNG_SET_ID   IN (:rtngSetIds )
+		AND rtng_pkg_typ     = 'STORE_DB'
+		AND mkt_id=:marketId
+		AND rtng_pkg.dltd_fl = 0]]>
+  
+  </getNameKVSVolumeProductionDetails>
+  
+  <getAllowExportAddtlRtngFlag>
+  <![CDATA[
+  		SELECT PARAM_VALUE ALLOWEXPORTADDITIONALROUTING
+			FROM GLOBAL_PARAM
+			WHERE PARAM_NAME = 'ALLOW_EXPORT_ADDITIONAL_ROUTING'
+			AND  MKT_ID=:marketId
+			AND dltd_fl      =0 ]]>
+	</getAllowExportAddtlRtngFlag>
+	
+	<getPromotionImages>
+  <![CDATA[
+  	SELECT DISTINCT RM.MDIA_FILE_NA
+    FROM RFM_MDIA RM
+    WHERE RM.MDIA_TYP = 5
+    AND RM.MKT_ID     = :mkt_id
+    AND RM.DLTD_FL    = 0
+    ]]>
+  </getPromotionImages>
+
+	<getLocalizationPrntCustmSet>
+        <![CDATA[   SELECT pren_set_id,
+                           cusm_set_id
+                    FROM REST_DATA
+                    WHERE REST_ID = :restId
+                      AND REST_INST_ID = :restInstId
+                      AND asn_set_typ = 6015
+                      AND dltd_fl = 0]]>
+    </getLocalizationPrntCustmSet>
+    
+ <getFuncLocalizationSet>
+        <![CDATA[  SELECT 
+TRIM(COALESCE(c.CTRY_ID, p.CTRY_ID)) as CTRY_ID,
+COALESCE(c.LANG_CD, p.LANG_CD) as LANG_CD,
+CASE
+        WHEN COALESCE(c.CTRY_VRNT_ID, p.CTRY_VRNT_ID) != '-999'
+        THEN COALESCE(c.CTRY_VRNT_ID, p.CTRY_VRNT_ID)
+      end as CTRY_VRNT_ID,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = (SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =37480 AND l.DLTD_FL = 0)
+    AND MV.ENTR_CD  = COALESCE(c.DATE_FRMT, p.DATE_FRMT)) as DATE_FRMT,
+COALESCE((SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 20009
+    AND MV.ENTR_CD  = COALESCE(c.TM_FRMT, p.TM_FRMT)),'HH:mm:ss') as TM_FRMT,
+COALESCE((SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 37434
+    AND MV.ENTR_CD  = COALESCE(c.DCML_SEPR, p.DCML_SEPR)),'') as DCML_SEPR,
+COALESCE((SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 51243
+    AND MV.ENTR_CD  = COALESCE(c.THOU_SEPR, p.THOU_SEPR)),'') as THOU_SEPR,
+COALESCE(c.CURN_NA, p.CURN_NA) as CURN_NA,
+COALESCE(c.CURN_SYMB, p.CURN_SYMB) as CURN_SYMB,
+CASE COALESCE(c.CURN_DCMLS, p.CURN_DCMLS) WHEN -999 THEN NULL ELSE COALESCE(c.CURN_DCMLS, p.CURN_DCMLS) end
+as CURN_DCMLS,
+COALESCE(c.MIN_CLTNG_AM,p.MIN_CLTNG_AM) as MIN_CLTNG_AM,
+COALESCE(c.MIN_LGL_AM,p.MIN_LGL_AM) as MIN_LGL_AM,
+COALESCE((SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 37468
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(c.CSO_GRLL_SCR_LOUT, p.CSO_GRLL_SCR_LOUT)),'') as CSO_GRLL_SCR_LOUT,
+CASE
+        WHEN COALESCE(c.PSTV_CURN_FRMT, p.PSTV_CURN_FRMT) IS NOT NULL
+        AND cast(COALESCE(c.PSTV_CURN_FRMT, p.PSTV_CURN_FRMT) as numeric ) != -1
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =51358 AND l.DLTD_FL = 0) AND le.Entr_cd = COALESCE(c.PSTV_CURN_FRMT, p.PSTV_CURN_FRMT)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as PSTV_CURN_FRMT,
+CASE
+        WHEN COALESCE(c.NGTV_CRNY_FRMT, p.NGTV_CRNY_FRMT) IS NOT NULL
+        AND cast(COALESCE(c.NGTV_CRNY_FRMT, p.NGTV_CRNY_FRMT) as numeric ) != -1
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =51736 AND l.DLTD_FL = 0) AND le.Entr_cd = COALESCE(c.NGTV_CRNY_FRMT, p.NGTV_CRNY_FRMT)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as NGTV_CRNY_FRMT,
+CASE
+        WHEN COALESCE(c.ORD_TOT_RNDG_RULE, p.ORD_TOT_RNDG_RULE) IS NOT NULL
+        AND COALESCE(c.ORD_TOT_RNDG_RULE, p.ORD_TOT_RNDG_RULE) != -999
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90001 AND l.DLTD_FL = 0) AND cast(le.Entr_cd as numeric) = COALESCE(c.ORD_TOT_RNDG_RULE, p.ORD_TOT_RNDG_RULE)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as ORD_TOT_RNDG_RULE,
+CASE
+        WHEN COALESCE(c.TOT_DUE_RNDG_RULE, p.TOT_DUE_RNDG_RULE) IS NOT NULL
+        AND cast(COALESCE(c.TOT_DUE_RNDG_RULE, p.TOT_DUE_RNDG_RULE) as numeric ) != -999
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90002 AND l.DLTD_FL = 0) AND cast(le.Entr_cd as numeric) = COALESCE(c.TOT_DUE_RNDG_RULE, p.TOT_DUE_RNDG_RULE)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as TOT_DUE_RNDG_RULE,
+CASE
+        WHEN COALESCE(c.DISC_RND_RULE, p.DISC_RND_RULE) IS NOT NULL
+        AND cast(COALESCE(c.DISC_RND_RULE, p.DISC_RND_RULE) as numeric ) != -999
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90003 AND l.DLTD_FL = 0) AND cast(le.Entr_cd as numeric) = COALESCE(c.DISC_RND_RULE, p.DISC_RND_RULE)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as DISC_RND_RULE,
+CASE
+        WHEN COALESCE(c.Def_Rndg_Rule, p.Def_Rndg_Rule) IS NOT NULL
+        AND cast(COALESCE(c.Def_Rndg_Rule, p.Def_Rndg_Rule) as numeric ) != -999
+        THEN COALESCE
+        ((SELECT l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =(SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90004 AND l.DLTD_FL = 0) AND cast(le.Entr_cd as numeric) = COALESCE(c.Def_Rndg_Rule, p.Def_Rndg_Rule)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0), '')
+      end as Def_Rndg_Rule,
+CASE
+        WHEN COALESCE(c.RD_DISP_MODE, p.RD_DISP_MODE) IS NOT NULL
+        AND cast(COALESCE(c.RD_DISP_MODE, p.RD_DISP_MODE) as numeric ) != -999
+        then (SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 90021
+    AND MV.ENTR_CD  = COALESCE(c.RD_DISP_MODE, p.RD_DISP_MODE)) end as RD_DISP_MODE
+FROM
+      (SELECT rli.CTRY_ID,
+        LANG_CD,
+        rli.CTRY_VRNT_ID,
+        rli.DT_FRMT AS DATE_FRMT,
+        rli.TM_FRMT,
+        rli.DCML_SEPR ,
+        rli.THOU_SEPR,
+        (SELECT l.trnsltd_val
+        FROM lclz l
+        WHERE cur.curn_id=l.lex_id
+        AND l.lcle_id    = 1
+        )CURN_NA,
+        cur.SYMB CURN_SYMB,
+        rli.CURN_DCMLS,
+        NGTV_CRNY_FRMT,
+        PSTV_CURN_FRMT,
+        rli.MIN_CLTNG_AM,
+        rli.MIN_LGL_AM ,
+        rli.CSO_GRLL_SCR_LOUT,
+        Rli.Set_Id,
+        rli.ORD_TOT_RNDG_RULE,
+        rli.TOT_DUE_RNDG_RULE,
+        Rli.Disc_Rnd_Rule,
+        rli.DEF_RNDG_RULE,
+        rli.RD_DISP_MODE
+      FROM rest_lclz_info rli
+      LEFT OUTER JOIN LANG lng
+      ON rli.LANG_ID=lng.LANG_ID
+      LEFT OUTER JOIN CURN cur
+      ON cur.CURN_ID          = CAST(rli.CURN_NA as numeric )
+      WHERE rli.SET_ID       = :parentSetId
+     AND :effectiveDate between rli.strt_dt and rli.end_dt
+      AND COALESCE(rli.DLTD_FL ,0) = 0
+      ) p
+    LEFT OUTER JOIN
+      (SELECT rli.CTRY_ID,
+         LANG_CD,
+        rli.CTRY_VRNT_ID,
+        rli.DT_FRMT AS DATE_FRMT,
+        rli.TM_FRMT,
+        rli.DCML_SEPR ,
+        rli.THOU_SEPR,
+        (SELECT l.trnsltd_val
+        FROM lclz l
+        WHERE cur.curn_id=l.lex_id
+        AND l.lcle_id    = 1
+        )CURN_NA,
+        cur.SYMB CURN_SYMB,
+        rli.CURN_DCMLS,
+        NGTV_CRNY_FRMT,
+        PSTV_CURN_FRMT,
+        rli.MIN_CLTNG_AM,
+        rli.MIN_LGL_AM ,
+        rli.CSO_GRLL_SCR_LOUT,
+        rli.set_id,
+        rli.ORD_TOT_RNDG_RULE,
+        rli.TOT_DUE_RNDG_RULE,
+        Rli.Disc_Rnd_Rule,
+        rli.DEF_RNDG_RULE,
+        rli.RD_DISP_MODE
+      FROM rest_lclz_info rli
+      LEFT OUTER JOIN LANG lng
+      ON rli.LANG_ID=lng.LANG_ID
+      LEFT OUTER JOIN CURN cur
+      ON cur.CURN_ID          = CAST(rli.CURN_NA as numeric)
+      WHERE rli.set_id       = :childSetId
+      AND COALESCE(rli.DLTD_FL ,0) = 0
+      )  c
+    ON 1= 1]]>
+</getFuncLocalizationSet>
+
+<getCategoryDetails>
+  <![CDATA[
+  WITH RECURSIVE ctg AS (
+SELECT array [cat.cat_seq::varchar,cat.cat_id::varchar] AS hierarchy,
+  cat.cat_cd ,cat.pren_cat_cd,cat.pren_cat_id ,     
+        CASE WHEN cast( cat.pren_cat_cd as numeric) = 0
+        THEN
+             COALESCE(rm.available, 'false')
+        END enabled,
+     na.cat_ds,clr.HXCD,cat.dypt ,cat.img_na,cat.cat_seq,cat.cat_id 
+    FROM prd_cat cat
+    LEFT JOIN cat_na na
+    ON cat.cat_id  = na.cat_id
+    AND na.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:marketId and dflt=1 and dltd_fl=0)
+     LEFT JOIN rest_menu_type_asgn rm
+    ON cat.cat_cd = rm.cat_cd
+    and rm.rest_id = :restId
+    and rm.rest_inst_id = :restInstId
+    and rm.mkt_id= :marketId
+    LEFT JOIN colr clr
+    ON cat.colr_id                = clr.colr_id
+    WHERE cat.mkt_id              = :marketId
+    AND cat.dltd_fl               = 0
+    AND :effectiveDate between  cat.strt_dt and cat.end_dt
+	 AND cat.lvl_id =1
+	 union 
+select ctg.hierarchy|| array [a.cat_seq::varchar,a.cat_id::varchar], a.cat_cd ,a.pren_cat_cd,a.pren_cat_id ,     
+      a.enabled,a.cat_ds,a.HXCD,a.dypt ,a.img_na, a.cat_seq, a.cat_id 
+      from (select cat.cat_cd ,cat.pren_cat_cd,cat.pren_cat_id ,     
+             CASE WHEN cast( cat.pren_cat_cd as numeric) = 0
+        THEN
+             COALESCE(rm.available, 'false')
+        END enabled,
+     na.cat_ds, clr.HXCD,cat.dypt,cat.img_na,cat.cat_seq, cat.cat_id 
+    FROM prd_cat cat
+    LEFT JOIN cat_na na
+    ON cat.cat_id  = na.cat_id
+    AND na.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:marketId and dflt=1 and dltd_fl=0)
+     LEFT JOIN rest_menu_type_asgn rm
+    ON cat.cat_cd = rm.cat_cd
+    and rm.rest_id = :restId
+    and rm.rest_inst_id = :restInstId
+    and rm.mkt_id= :marketId
+    LEFT JOIN colr clr
+    ON cat.colr_id                = clr.colr_id
+    WHERE cat.mkt_id              = :marketId
+    AND cat.dltd_fl               = 0
+    AND :effectiveDate between  cat.strt_dt and cat.end_dt 
+        )a
+      JOIN ctg ON a.pren_cat_id = ctg.cat_id) 
+SELECT 
+cat_cd catcode,
+pren_cat_cd prn_catcode,
+pren_cat_id prn_cat_id,
+enabled,
+cat_ds catdesc,HXCD colorVal,
+dypt dayPart,
+img_na cat_img,cat_id,
+cat_seq cat_sequence
+ FROM ctg order by  hierarchy::numeric[]
+ ]]>
+ </getCategoryDetails>
+	
+	<getLanguageDetails>
+	<![CDATA[
+	SELECT 
+	  na.cat_id,
+	  string_agg(COALESCE(lcle.ctry,'NA'),';') as country,
+      string_agg(COALESCE(lang.lang_cd,'NA'),';') as langcode,
+      string_agg(COALESCE(lang.na,'NA'),';') as lang_name,
+      string_agg(coalesce(na.cat_ds,'NA'),';') as cat_lang_description,
+      string_agg(coalesce(na.IMAGE_NAME,'NA'),';') as imageName
+    FROM cat_na na
+    INNER JOIN mkt_lcl lcl
+    ON na.lcle_id = lcl.lcle_id
+    AND na.mkt_id = lcl.mkt_id
+    and lcl.dltd_fl = 0
+    LEFT JOIN lcla lcla
+    ON lcl.lcle_id = lcla.lcle_id
+    and lcla.dltd_fl = 0
+    LEFT JOIN lang lang
+    ON lcla.lang_id = lang.lang_id
+    and lang.dltd_fl = 0
+    LEFT JOIN lcle lcle
+    ON lcla.lc_id    = lcle.lc_id
+    and lcle.dltd_fl = 0
+    WHERE na.mkt_id = :marketId
+    and na.dltd_fl = 0
+    group by na.cat_id
+    order by langcode
+	]]>
+	</getLanguageDetails>
+
+	<getProductionKSGroups>
+	<![CDATA[SELECT
+         (SELECT DISTINCT lclz.trnsltd_val FROM rtng_grp
+          		 RIGHT OUTER JOIN lclz
+                 ON               lclz.lex_id = rtng_grp.grp_id
+                 AND              lclz.lcle_id = :defaultMktLocale
+                 WHERE            rtng_grp.grp_id = restrtng.grp_id ) AS xmlid,
+          String_agg(
+		  (SELECT DISTINCT dvce_na
+		  FROM rtng_pos_dvcs
+		  WHERE pos_dvce_id = restrtng.pos_dvce_id
+		  ),',' order by (SELECT DISTINCT dvce_na
+		  FROM rtng_pos_dvcs
+		  WHERE pos_dvce_id = restrtng.pos_dvce_id
+		  )) xmlpath
+FROM     rest_rtng_grp_dvc restrtng
+WHERE    dltd_fl = 0
+AND      rest_inst_id = :restInstId
+AND      rest_id = :restId
+AND      (grp_id,pos_dvce_id) IN
+         (SELECT rgp.grp_id, rpd.pos_dvce_id
+                FROM   rtng_grp rgp, rtng_pos_dvcs rpd
+                WHERE  rgp.rtng_area_id=rpd.rtng_area_id
+                AND    rgp.dltd_fl = 0
+                AND    rgp.mkt_id=rpd.mkt_id
+                AND    rgp.mkt_id =:marketId)
+AND      grp_id IN
+         ( SELECT srce_grp FROM   rtng_rte WHERE  rtng_set_id = (:psntnRtngSet) )
+GROUP BY rest_id,
+         rest_inst_id,
+         grp_id,
+         dltd_fl
+ORDER BY xmlid,
+         xmlpath]]>
+	</getProductionKSGroups>
+	
+<getCategoryHours>
+<![CDATA[select 
+cat_cd,
+sun_strt_tm,
+sun_end_tm,
+mon_strt_tm,
+mon_end_tm,
+tue_strt_tm,
+tue_end_tm,
+wed_strt_tm,
+wed_end_tm,
+thu_strt_tm,
+thu_end_tm,
+fri_strt_tm,
+fri_end_tm,
+sat_strt_tm,
+sat_end_tm
+from
+rest_menu_type_asgn
+  WHERE rest_id    = :rest_id
+  AND rest_inst_id = :rest_inst_id
+  AND mkt_id = :mkt_id
+  AND available = 'true'
+  order by cat_cd]]>
+  </getCategoryHours>
+  	
+	<getProductionKitchenGroups>
+	<![CDATA[SELECT kit1.*, kit2.*
+FROM
+  (SELECT DISTINCT coalesce(lclz.trnsltd_val,'') AS trnsltd_val, coalesce (KIT_GRP.grp_name_id::varchar,'') AS grpname1
+   FROM KIT_GRP RIGHT OUTER JOIN lclz
+   ON lclz.lex_id  = kit_grp.grp_id
+     AND lclz.lcle_id  = :defaultMktLocale
+     WHERE KIT_GRP.dltd_fl = 0) kit1
+JOIN
+  (SELECT coalesce (KIT_GRP.grp_name_id::varchar,'') AS grpname2,
+  (SELECT coalesce(rtng_area.QUE_TYP,'') || ':' || coalesce(lz.trnsltd_val,'')
+				FROM lclz lz
+					WHERE lz.lex_id =  rtng_area.SHRT_NA_LEX_ID
+					AND lz.lcle_id  = :defaultMktLocale
+					AND lz.DLTD_FL = 0) ShorTypeQueue,
+          coalesce (REST_KIT_GRP_QUEUE.PRI_LVL::varchar,'') as PriorityLvl
+   FROM REST_KIT_GRP_QUEUE,
+        KIT_GRP,
+        rtng_area
+   WHERE REST_KIT_GRP_QUEUE.grp_id = KIT_GRP.grp_id
+     AND rtng_area.rtng_area_id = REST_KIT_GRP_QUEUE.rtng_area_id
+	 AND rtng_area.rtng_area_id = REST_KIT_GRP_QUEUE.rtng_area_id
+	 AND REST_KIT_GRP_QUEUE.rest_id = :restId
+	 AND REST_KIT_GRP_QUEUE.rest_inst_id = :restInstId
+	 AND KIT_GRP.mkt_id = :marketId
+     AND REST_KIT_GRP_QUEUE.dltd_fl=0) kit2 ON kit2.grpname2 = kit1.grpname1
+ORDER BY kit2.grpname2, kit2.PriorityLvl]]>
+	</getProductionKitchenGroups>
+
+<getTaxSearchSets>
+<![CDATA[  with recursive cte_name as 
+(select  p1.NODE_ID, p1.CHLD_NODE_ID, p1.INHR_ORD from (SELECT NH.NODE_ID,
+             NH.CHLD_NODE_ID,
+             NH.INHR_ORD
+      FROM NODE N,
+           NODE_HRCY NH
+      WHERE N.NODE_ID = NH.NODE_ID
+        AND NH.NODE_ID <> NH.CHLD_NODE_ID
+        AND NH.MKT_ID = :mktId
+        AND N.DLTD_FL = 0
+        AND NH.DLTD_FL = 0)p1 where CHLD_NODE_ID IN (:nodeID)
+UNION all select p2.NODE_ID, p2.CHLD_NODE_ID, p2.INHR_ORD from (SELECT NH.NODE_ID,
+             NH.CHLD_NODE_ID,
+             NH.INHR_ORD
+      FROM NODE N,
+           NODE_HRCY NH
+      WHERE N.NODE_ID = NH.NODE_ID
+        AND NH.NODE_ID <> NH.CHLD_NODE_ID
+        AND NH.MKT_ID = :mktId
+        AND N.DLTD_FL = 0
+        AND NH.DLTD_FL = 0)p2 
+join 	cte_name on cte_name.NODE_ID=p2.CHLD_NODE_ID)
+SELECT S.SET_ID,
+           S.NA,
+           S.CRTR_NODE_ID,
+           N.SHRT_NA,
+           S.TYP,
+           S.STUS,
+           INHR_ORD,
+           T.TAX_TYP_CODE,
+           to_char(T.STRT_DT,'MM/DD/YYYY') as  STRT_DT,
+           T.TAX_TYP_ID as DATA_ID
+    FROM SETS S,
+         NODE N,
+         DSET D,
+         TAX_TYP T,
+         cte_name 
+    WHERE S.MKT_ID= :mktId
+      AND S.CRTR_NODE_ID = cte_name.CHLD_NODE_ID
+      AND S.CRTR_NODE_ID = N.NODE_ID
+      AND S.TYP = 4005
+      AND (S.MSTR = 0 OR S.MSTR IS NULL)
+      AND (S.STUS = 1 OR S.STUS = 2)
+      AND S.DLTD_FL = 0
+      AND D.SET_ID=S.SET_ID
+      AND T.DSET_ID = D.DSET_ID
+      AND :effectiveDate BETWEEN T.STRT_DT AND T.END_DT
+    UNION
+    SELECT S.SET_ID,
+           S.NA,
+           S.CRTR_NODE_ID,
+           N.SHRT_NA,
+           S.TYP,
+           S.STUS,
+           INHR_ORD,
+           TC.TAX_CHN_CD TAX_TYP_CODE,
+           to_char(TC.STRT_DT,'MM/DD/YYYY') as  STRT_DT,
+           TC.TAX_CHN_ID DATA_ID
+    FROM SETS S,
+         NODE N,
+         DSET D,
+         cte_name,
+         TAX_CHN TC
+    WHERE S.MKT_ID= :mktId
+      AND S.CRTR_NODE_ID = cte_name.CHLD_NODE_ID
+      AND S.CRTR_NODE_ID = N.NODE_ID
+      AND S.TYP = 4006
+      AND (S.MSTR = 0 OR S.MSTR IS NULL)
+      AND (S.STUS = 1 OR S.STUS = 2)
+      AND S.DLTD_FL = 0
+      AND D.SET_ID=S.SET_ID
+      AND TC.DSET_ID = D.DSET_ID
+      AND :effectiveDate  BETWEEN TC.STRT_DT AND TC.END_DT
+    ORDER BY TAX_TYP_CODE ASC, INHR_ORD DESC]]>
+</getTaxSearchSets>
+<getTaxType>
+<![CDATA[SELECT 
+(select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37478 and cast(entr_cd as varchar)= COALESCE(cast(typ.STUS as varchar), '')) as stus,
+      coalesce (TYP.TAX_TYP_CODE , 0) as TAX_TYP_CODE,
+      typ.TAX_TYP_NA as TAX_TYP_NA,
+     coalesce(cast(typ.TAX_RATE as numeric), 0) as TAX_RATE,
+     coalesce( (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =1491 and entr_cd = COALESCE(cast(typ.TAX_BSIS as varchar), '')),'') as TAX_BSIS,
+      coalesce( (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =20147 and entr_cd= COALESCE(cast(typ.TAX_CALC_TYP as varchar), '')),'') as TAX_CALC_TYP ,
+     coalesce( (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =1405 and entr_cd= COALESCE(cast(typ.RNDG as varchar), '')),'') as RNDG,
+      coalesce( (select cast(pkg_gen_cd as numeric) from mw_pkggen_lkup_cd mplc where lex_id =1521 and cast (entr_cd as numeric)= COALESCE(typ.PRCN, 0)),0) as PRCN,
+      CASE
+        WHEN :scriptManagementFlag='Y'
+        THEN
+          (SELECT scpt_na
+          FROM scpt
+          WHERE scpt_id = cast(typ.TAX_RULE as numeric)
+          AND mkt_id    = :mktId
+          AND dltd_fl   = 0
+          )
+        ELSE TYP.TAX_RULE
+      END as scpt_na,
+      typ.TAX_TYP_ID as TAX_TYP_ID,
+    to_char(typ.STRT_DT,'MM/DD/YYYY') as  STRT_DT,
+      typ.TAX_ID as TAX_ID
+    FROM TAX_TYP typ where (typ.tax_id ,typ.tax_typ_code,typ.STRT_DT) in (:valuesMap)
+   and typ.stus in (1,2)]]>
+</getTaxType>
+<getTaxBreakDown>
+<![CDATA[SELECT brkd.TAX_TYP_ID,BRKD.STRT_DT,BRKD.TAX_ID,
+	TRIM(to_char(coalesce (BRKD.TAX_BRKD_BEG , 0),'9999990.99')) as TAX_BRKD_BEG,
+		trim(TO_CHAR(coalesce(brkd.TAX_BRKD_END , 0),'9999990.99')) as TAX_BRKD_END,
+		TRIM(TO_CHAR(coalesce(BRKD.TAX_BRKD_AM , 0),'9999990.99')) as TAX_BRKD_AM
+      FROM TAX_BRKD brkd
+      WHERE (brkd.TAX_TYP_ID,BRKD.STRT_DT,BRKD.TAX_ID) in (:taxBreakdownMap)           
+      AND BRKD.DLTD_FL            = 0
+      ]]>
+</getTaxBreakDown>
+
+
+	<getFacilities>
+        <![CDATA[
+	select 	 COALESCE((SELECT ML.PKG_GEN_Cd  from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = 94271 and ml.entr_cd =cast(fc.fcil_id as varchar)), cast(fc.fcil_id as varchar))  FCIL_VAL
+	  from REST_FCIL fc
+              WHERE rest_id      = :restId
+              AND rest_inst_id = :restInstId
+              AND dltd_fl      =0
+              and mkt_id = :mktId]]>
+    </getFacilities>
+    
+    <getTenderTypesSet>
+        <![CDATA[   SELECT pren_set_id,
+                           cusm_set_id
+                    FROM REST_DATA
+                    WHERE REST_ID = :restId
+                      AND REST_INST_ID = :restInstId
+                      AND asn_set_typ = 4007
+                      AND dltd_fl = 0]]>
+    </getTenderTypesSet>
+    
+    <getTenderTypesMarketId>
+        <![CDATA[   select distinct(set_id)
+   FROM SETS S
+      WHERE TYP      =4001
+      AND MKT_ID   = :mktId
+      AND DLTD_FL  =0]]>
+    </getTenderTypesMarketId>
+    
+    <getTenderTypeList>
+        <![CDATA[   SELECT M.TEND_TYP_ID,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 110 
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(C.STUS, P.STUS),M.STUS)) as STUS,
+COALESCE(COALESCE(C.TEND_ID,P.TEND_ID),M.TEND_ID) as TEND_ID,
+COALESCE(P.FISC_INDX, M.FISC_INDX) as FISC_INDX,
+COALESCE(COALESCE(C.TEND_NA,P.TEND_NA),M.TEND_NA) as TEND_NA,
+COALESCE(COALESCE(C.CHG_TEND_TYP_ID,P.CHG_TEND_TYP_ID), M.CHG_TEND_TYP_ID) as CHG_TEND_TYP_ID,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1389
+    AND MV.ENTR_CD  = COALESCE(COALESCE(COALESCE(C.TEND_CHG_TYP, P.TEND_CHG_TYP),M.TEND_CHG_TYP),'1')) as TEND_CHG_TYP,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 63861
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(COALESCE(C.RND_TO_MIN_AM, P.RND_TO_MIN_AM),M.RND_TO_MIN_AM),1)) as RND_TO_MIN_AM, 
+ COALESCE(P.MAX_CHG_ALLW, M.MAX_CHG_ALLW)  as MAX_CHG_ALLW,
+ COALESCE(P.MIN_CLTNG_AM, M.MIN_CLTNG_AM)  as MIN_CLTNG_AM,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1899
+    AND cast(MV.ENTR_CD as numeric ) = COALESCE(COALESCE(C.TEND_CAT, P.TEND_CAT),M.TEND_CAT)) as TEND_CAT_NA,
+COALESCE(COALESCE(C.NOT_OPEN_DRWR,P.NOT_OPEN_DRWR),M.NOT_OPEN_DRWR) as NOT_OPEN_DRWR,
+COALESCE(COALESCE(C.IS_BANK_CHECK,P.IS_BANK_CHECK), M.IS_BANK_CHECK) as IS_BANK_CHECK,
+COALESCE(COALESCE(C.INCLD_IN_DPST,P.INCLD_IN_DPST), M.INCLD_IN_DPST) as INCLD_IN_DPST,
+COALESCE(COALESCE(C.NO_SKIM,P.NO_SKIM), M.NO_SKIM) as NO_SKIM,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1499
+    AND cast(MV.ENTR_CD as numeric ) = COALESCE(COALESCE(C.TAX_OPT, P.TAX_OPT),M.TAX_OPT)) as TAX_OPT,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1499
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(C.TAX_STOT_OPT, P.TAX_STOT_OPT),M.TAX_STOT_OPT)) as TAX_STOT_OPT,
+COALESCE(CASE COALESCE(COALESCE(C.SKIM_LMT, P.SKIM_LMT),M.SKIM_LMT)  WHEN -999 THEN NULL ELSE COALESCE(COALESCE(C.SKIM_LMT, P.SKIM_LMT),M.SKIM_LMT) END,NULL) 
+as SKIM_LMT,
+COALESCE(CASE COALESCE(COALESCE(C.HALO_LMT, P.HALO_LMT),M.HALO_LMT)  WHEN -999 THEN NULL ELSE COALESCE(COALESCE(C.HALO_LMT, P.HALO_LMT),M.HALO_LMT) END,NULL)
+as HALO_LMT,
+COALESCE(CASE COALESCE(COALESCE(C.CURN_DCMLS , P.CURN_DCMLS),M.CURN_DCMLS)  WHEN -999 THEN 0 ELSE COALESCE(COALESCE(C.CURN_DCMLS, P.CURN_DCMLS),M.CURN_DCMLS) END,0)
+as CURN_DCMLS,
+COALESCE(COALESCE(C.TEND_CAT, P.TEND_CAT),M.TEND_CAT) as TEND_CATID,
+COALESCE(COALESCE(COALESCE(c.LGCY_ID, p.LGCY_ID),m.LGCY_ID),NULL) as LGCY_ID,
+CASE COALESCE(COALESCE(C.AM, P.AM),M.AM)  WHEN -999 THEN 0 ELSE COALESCE(COALESCE(C.AM, P.AM),M.AM) end as AM,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 37428
+    AND MV.ENTR_CD  = COALESCE(COALESCE(COALESCE(C.def_frgn_curn,P.def_frgn_curn), M.def_frgn_curn),NULL)) as DEF_FRGN_CURN,
+COALESCE(COALESCE(COALESCE(C.XCNG_RATE, P.XCNG_RATE), M.XCNG_RATE),NULL) as XCNG_RATE,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 27420
+    AND MV.ENTR_CD  = COALESCE(COALESCE(COALESCE(C.OREN,P.OREN), M.OREN),NULL)) as OREN,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = (SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =32453 AND l.DLTD_FL = 0)
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(COALESCE(C.PRCN,P.PRCN), M.PRCN),NULL)) as PRCN,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 32461
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(COALESCE(C.RNDG,P.RNDG), M.RNDG),NULL)) as RNDG,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 32473
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(COALESCE(C.XCNG_MODE,P.XCNG_MODE), M.XCNG_MODE),NULL)) as XCNG_MODE,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = (SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90005 AND l.DLTD_FL = 0)
+    AND cast(MV.ENTR_CD as numeric)  = COALESCE(COALESCE(COALESCE(C.Tend_Rndg_Rule,P.Tend_Rndg_Rule), M.Tend_Rndg_Rule),NULL)) as TEND_RNDG_RULE,
+COALESCE(COALESCE(COALESCE(C.SYMBOL, P.SYMBOL), M.SYMBOL),NULL) as SYMBOL
+from (SELECT STUS,
+          TEND_ID,
+          FISC_INDX,
+          TEND_NA,
+          CHG_TEND_TYP_ID,
+          TEND_CHG_TYP,
+          RND_TO_MIN_AM,
+          MAX_CHG_ALLW,
+          TEND_CAT,
+          NOT_OPEN_DRWR,
+          INCLD_IN_DPST,
+          IS_BANK_CHECK,
+          NO_SKIM,
+          TAX_OPT,
+          TAX_STOT_OPT,
+          SKIM_LMT,
+          HALO_LMT,
+          CURN_DCMLS,
+          def_frgn_curn,
+          LGCY_ID,
+          AM ,
+          XCNG_MODE,
+          XCNG_RATE,
+          RNDG,
+          OREN,
+          Prcn,
+          Tt.Tend_Typ_Id,
+          Tend_Rndg_Rule,
+          MIN_CLTNG_AM,
+          SYMBOL
+        FROM
+          TEND_TYP tt
+        WHERE tt.set_id= :masterSetID
+          AND tt.sub_typ=4001
+          AND tt.mkt_id= :mktId
+          AND :effectiveDate between tt.strt_dt and tt.end_dt
+        AND coalesce(tt.DLTD_FL ,0) = 0
+      ) m
+      INNER JOIN
+        (SELECT STUS,
+          TEND_ID,
+          FISC_INDX,
+          TEND_NA,
+          CHG_TEND_TYP_ID,
+          TEND_CHG_TYP ,
+          RND_TO_MIN_AM,
+          MAX_CHG_ALLW,
+          TEND_CAT,
+          NOT_OPEN_DRWR,
+          INCLD_IN_DPST,
+          IS_BANK_CHECK,
+          NO_SKIM,
+          TAX_OPT,
+          TAX_STOT_OPT,
+          SKIM_LMT,
+          HALO_LMT,
+          CURN_DCMLS,
+          def_frgn_curn,
+          LGCY_ID,
+          AM,
+          XCNG_RATE,
+          OREN,
+          PRCN,
+          RNDG,
+          XCNG_MODE ,
+          Tend_Typ_Id,
+          Tend_Rndg_Rule,
+          MIN_CLTNG_AM,
+          SYMBOL
+        FROM TEND_TYP TT
+        WHERE tt.set_id= :parentSetId 
+        AND tt.mkt_id= :mktId
+        AND :effectiveDate between tt.strt_dt and tt.end_dt
+        AND COALESCE(TT.DLTD_FL ,0) = 0
+        AND TT.TEND_CAT       != 3
+        ) p
+      ON m.tend_typ_id = p.tend_typ_id
+      LEFT OUTER JOIN
+        (SELECT STUS,
+          TEND_ID,
+          FISC_INDX,
+          TEND_NA,
+          CHG_TEND_TYP_ID,
+          TEND_CHG_TYP ,
+          RND_TO_MIN_AM,
+          MAX_CHG_ALLW,
+          TEND_CAT,
+          NOT_OPEN_DRWR,
+          INCLD_IN_DPST,
+          IS_BANK_CHECK,
+          NO_SKIM,
+          TAX_OPT,
+          TAX_STOT_OPT,
+          SKIM_LMT,
+          HALO_LMT,
+          CURN_DCMLS,
+          def_frgn_curn,
+          LGCY_ID,
+          AM,
+          XCNG_RATE,
+          OREN,
+          PRCN,
+          RNDG,
+          XCNG_MODE ,
+          Tend_Typ_Id,
+          Tend_Rndg_Rule,
+          MIN_CLTNG_AM,
+          SYMBOL
+        FROM TEND_TYP TT
+        WHERE tt.set_id= :childSetId
+        AND :effectiveDate between tt.strt_dt and tt.end_dt
+        AND COALESCE(TT.DLTD_FL ,0) = 0
+        ) C
+      ON M.TEND_TYP_ID = C.TEND_TYP_ID
+	  ORDER BY COALESCE(COALESCE(C.TEND_ID,P.TEND_ID),M.TEND_ID)]]>
+    </getTenderTypeList>
+    
+
+    <getDeliveryOrderingHours>
+        <![CDATA[SELECT * from rest_alt_ord where rest_id = :rest_id
+AND dltd_fl = 0
+AND psnt_area_cd in (:psnt_area_cd)
+AND rest_inst_id = :rest_inst_id]]>
+    </getDeliveryOrderingHours>
+    
+    <getCustomDayPart>
+        <![CDATA[select distinct d.* from  rest_dypt d, setvo svo
+        where d.dltd_fl = 0 and d.mkt_id= :mkt_id   and
+        d.data_id in (
+        select DAY_PART_ID from  VW_DLY_SET_CHG_RULE WHERE DLY_SET_ID=:dly_set_id  union
+        select DAY_PART_ID from  VW_DLY_MIN_ORD_VAL WHERE DLY_SET_ID=:dly_set_id
+        ) and dltd_fl=0
+        and svo.data_id = d.data_id   and svo.stus=1 and
+      	svo.typ=6032 and svo.data_typ=6032 and svo.mkt_id=:mkt_id and
+        svo.data_inst_id=d.data_inst_id]]>
+    </getCustomDayPart>
+    
+    <getChargeRules>
+        <![CDATA[select
+	(
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'ORDER_CHANNEL'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = ORDER_CHANEL) as ORDER_CHANEL,
+	RULE_ID,
+	DAY_PART_ID,
+	TOT_MIN_THREESHOLD,
+	BIN_NUMBER,
+	MINIMUM_LIMIT_MINUTES,
+	MAXIMUM_LIMIT_MINUTES,
+	(
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'DELIVERY_PAYMENT_TYPE'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = PAY_TYPE) as PAY_TYPE
+from
+	VW_DLY_SET_CHG_RULE
+where
+	DLY_SET_ID =:dly_set_id
+order by
+	ORDER_CHANEL,
+	RULE_ID]]>
+    </getChargeRules>
+    
+    <getMinOrderRules>
+        <![CDATA[select
+	(
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'ORDER_CHANNEL'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = ORDER_CHANEL) as ORDER_CHANEL,
+	RULE_ID,
+	DAY_PART_ID,
+	ORD_VAL
+from
+	VW_DLY_MIN_ORD_VAL
+where
+	DLY_SET_ID =:dly_set_id
+order by
+	ORDER_CHANEL,
+	RULE_ID]]>
+    </getMinOrderRules>
+    
+    <getLargeOrderRules>
+        <![CDATA[select
+	(
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'ORDER_CHANNEL'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = ORDER_CHANEL) as ORDER_CHANEL,
+	RULE_ID,
+	TOT_MIN_THREESHOLD,
+	EST_DLY_MIN,
+	case
+		when IS_CONF_NEE = 1 then 'true'
+		else 'false'
+	end as IS_CONF_NEE,
+	case
+		when IS_ADV_ORD = 1 then 'true'
+		else 'false'
+	end as IS_ADV_ORD,
+	case
+		when MUL_RID_ALW = 1 then 'true'
+		else 'false'
+	end as MUL_RID_ALW ,
+	MIN_RID_COU,
+	DLY_LRG_ORD_VAL_ID,
+	 (
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'CASHLESS_PAYMENT_TYPE'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = TENDER_TYPE) as TENDER,
+	case
+		when ORDER_MAX_THREESHOLD = 1 then 'true'
+		else 'false'
+	end as IS_MAX_THREESHOLD
+from
+	VW_DLY_LRG_ORD_VAL
+where
+	DLY_SET_ID =:dly_set_id
+order by
+	ORDER_CHANEL,
+	RULE_ID]]>
+    </getLargeOrderRules>
+    
+    <getPluLargeOrderRules>
+        <![CDATA[ select
+	 (
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'ORDER_CHANNEL'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = ORDER_CHANEL) as ORDER_CHANEL,
+	RULE_ID,
+	DLY_PLU_ID,
+	EST_DLY_MIN ,
+	case
+		when IS_CONF_NEE = 1 then 'true'
+		else 'false'
+	end as IS_CONF_NEE,
+	case
+		when MUL_RID_ALW = 1 then 'true'
+		else 'false'
+	end as MUL_RID_ALW,
+	MUL_RID_COU,
+	QUANTITY ,
+	case
+		when IS_ADV_ORD = 1 then 'true'
+		else 'false'
+	end as IS_ADV_ORD ,
+	DLY_SET_ID,
+	(
+	select
+		max(mplc.pkg_gen_cd)
+	from
+		mw_pkggen_lkup_cd mplc,
+		lex l
+	where
+		l.srce_wd = 'CASHLESS_PAYMENT_TYPE'
+		and l.lex_id = mplc.lex_id
+		and
+              mplc.entr_cd = TENDER_TYPE) as TENDER,
+	case
+		when ORDER_MAX_THREESHOLD = 1 then 'true'
+		else 'false'
+	end as IS_MAX_THREESHOLD
+from
+	VW_DLY_PLU
+where
+	DLY_SET_ID =:dly_set_id
+order by
+	ORDER_CHANEL,
+	RULE_ID]]>
+    </getPluLargeOrderRules>
+    
+    <getNotification>
+        <![CDATA[select
+	distinct A.NOTE ,
+	B.LANG_CD,
+	B.NA ,
+	A.LANG_DESC as code,
+	A.TYP,A.DLY_SET_ID,A.DLY_SET_DTL
+from
+	VW_DLY_NOT A,
+	LANG B
+where
+	A.LANG_ID = B.LANG_ID
+	and A.TYP = A.TYP
+	and DLY_SET_ID =:dly_set_id
+	and
+         dly_Set_dtl = dly_set_dtl]]>
+    </getNotification>
+    
+    <getDeliverySetId>
+        <![CDATA[ select
+	max(dly_set_id)
+from
+	dly_set
+where
+	set_id in
+    (
+	select
+		case
+			when cusm_set_id is null then pren_set_id
+			else cusm_set_id
+		end
+	from
+		rest_data
+	where
+		rest_id =:rest_id
+		and ASN_SET_TYP = 6034
+		and dltd_fl = 0
+		and rest_inst_id =:rest_inst_id)
+	and del_ts is null
+	and MKT_ID = :mkt_id]]>
+    </getDeliverySetId>
+    
+    <getLargeOrderAllowed>
+        <![CDATA[ select
+	case
+		when lrg_ord_all = 0 then 'false'
+		else 'true'
+	end as lrg_ord_all
+from
+	DLY_SET
+where
+	dly_set_id = :dly_set_id]]>
+    </getLargeOrderAllowed>
+
+      <getProvidersDetails>
+        <![CDATA[ 
+        select * from (SELECT
+    prov.provider_LEX_id,
+    max(prov.provider_eff_dt) OVER(PARTITION BY prov.provider_LEX_id),
+		   lex.SRCE_WD,
+      	   prov.provider_alias,
+      	   prov.PROVIDER_TERMINAL,
+		   prov.provider_mail,
+		    prov.provider_id,
+      ROW_NUMBER() OVER (partition by prov.provider_lex_id order by prov.provider_eff_dt DESC) AS rowNumber
+      FROM
+      rest_providers prov
+      inner join
+      lex lex
+      on prov.provider_lex_id = lex.lex_id
+      where  prov.rest_id = :restId and prov.DLTD_FL = 0
+      AND  :effectiveDate >= prov.provider_eff_dt) as providersXml
+      where rowNumber = 1
+        ]]>
+    </getProvidersDetails>
+     <getDiscountCellGroupBndlFlag>
+  <![CDATA[
+  		SELECT PARAM_VALUE DISPLAY_DISC_SALE_GROUP_BUNDLE
+			FROM GLOBAL_PARAM
+			WHERE PARAM_NAME = 'DISPLAY_DISC_SALE_GROUP_BUNDLE'
+			AND  MKT_ID=:marketId
+			AND dltd_fl      =0 ]]>
+	</getDiscountCellGroupBndlFlag>
+	<discountBreakdnFlag>
+  <![CDATA[
+  		SELECT PARAM_VALUE DISCOUNT_BREAKDOWN_ENABLED
+			FROM GLOBAL_PARAM
+			WHERE PARAM_NAME = 'DISCOUNT_BREAKDOWN_ENABLED'
+			AND  MKT_ID=:marketId
+			AND dltd_fl      =0 ]]>
+	</discountBreakdnFlag>
+	<discountmstrSetId>
+	<![CDATA[
+	select distinct(d.set_id) set_id
+		 FROM SETS S,disc d
+			WHERE S.SET_ID =D.SET_ID
+			AND S.TYP      =4009
+			AND S.MKT_ID   = :marketId
+			AND D.SET_ID  =S.SET_ID
+			AND S.DLTD_FL  =0
+			AND D.DLTD_FL  =0 ]]>
+	</discountmstrSetId>
+	<discountTableTrue>
+	<![CDATA[
+	select p.DISC_ID,p.DISC_DS,COALESCE (COALESCE(c1.pc_disc_rate,c.pc_disc_rate),p.pc_disc_rate) pc_disc_rate ,
+	(SELECT MV.PKG_GEN_CD    FROM MW_PKGGEN_LKUP_CD MV  WHERE MV.LEX_ID = 24100 AND cast(MV.ENTR_CD as numeric) =COALESCE (COALESCE(C1.DISC_ALLOWED,C.DISC_ALLOWED), P.DISC_ALLOWED) ) DISC_ALLOWED,
+CASE WHEN CASE when COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) = -999 THEN NULL
+ WHEN  COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) IS NULL THEN NULL ELSE COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) END IS NOT NULL	 
+then CASE WHEN COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) = -999 THEN NULL  WHEN COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) IS NULL THEN NULL ELSE TRIM
+(TO_CHAR(COALESCE(COALESCE (c1.DISC_AM_LMT, c.DISC_AM_LMT),p.DISC_AM_LMT) ,'99999990.99')) END
+end as DISC_AM_LMT,
+CASE WHEN CASE when COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) = -999 THEN NULL
+ WHEN  COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) IS NULL THEN NULL ELSE COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) END IS NOT NULL	 
+then CASE when COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) = -999 THEN NULL  WHEN COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) IS NULL THEN NULL ELSE TRIM
+(TO_CHAR(COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) ,'99999990.99')) END
+end as MEMC,
+Case when COALESCE (COALESCE(c1.MEMC,c.MEMC),p.MEMC) IS NOT NULL
+then  COALESCE(COALESCE(COALESCE(c1.MEMCSaleType,c.MEMCSaleType),p.MEMCSaleType),'') end as MEMCSaleType,
+(SELECT MV.PKG_GEN_CD    FROM MW_PKGGEN_LKUP_CD MV  WHERE MV.LEX_ID = 1499 AND cast(MV.ENTR_CD as numeric) = COALESCE (COALESCE(C1.TAX_OPT,C.TAX_OPT), P.TAX_OPT)) taxoption
+from		
+(SELECT d.disc_typ_id,
+          d.disc_ds,
+          d.pc_disc_rate,
+          d.tax_opt,
+          d.disc_row_id,d.DISC_ID,
+          d.DISC_AM_LMT,
+          d.DISC_ALLOWED,
+		  d.MEMC,
+		  STRING_AGG (mw.PKG_GEN_CD::varchar,'|' ORDER by mw.ENTR_CD) MEMCSaleType
+        FROM DISC d
+        left join DISC_SALE_TYPE dst
+	       	on dst.SET_ID = d.SET_ID
+	      	and dst.STRT_DT = d.STRT_DT
+	      	and dst.DISC_ROW_ID = d.DISC_ROW_ID
+	      	AND d.DLTD_FL = 0
+      	left join MW_PKGGEN_LKUP_CD mw
+      		on dst.ENTR_CD::varchar = mw.ENTR_CD
+      		AND mw.LEX_ID in (SELECT distinct l.lex_id FROM LEX L
+            LEFT JOIN LKUP_NA LKN
+             ON L.LEX_ID = LKN.LEX_ID
+            LEFT JOIN LKUP_ENTR LE
+             ON LKN.LKUP_NA_ID = LE.LKUP_NA_ID
+            LEFT JOIN LCLZ LZ
+             ON LE.ENTR_VAL = LZ.LEX_ID
+           WHERE L.SRCE_WD = 'DISCOUNT_SALE_TYPE'
+           AND L.DLTD_FL = 0
+           AND LKN.DLTD_FL = 0
+           AND LKN.LKUP_TYP = 'MKT'
+           AND LZ.LCLE_ID = 1)
+      where d.set_id       = :mstrSetId
+       AND COALESCE(d.DLTD_FL ,0) = 0
+      group by d.DISC_ROW_ID, d.disc_typ_id, d.STRT_DT, d.disc_ds, d.pc_disc_rate,
+				d.tax_opt, D.DISC_ID, D.DISC_AM_LMT, d.DISC_ALLOWED, d.MEMC
+       order by d.DISC_ID)P
+    LEFT OUTER JOIN
+      (SELECT d.disc_typ_id,
+          d.disc_ds,
+          d.pc_disc_rate,
+          d.tax_opt,
+          d.disc_row_id,d.DISC_ID,
+          d.DISC_AM_LMT,
+          d.DISC_ALLOWED,
+		  d.MEMC,
+		 STRING_AGG (mw.PKG_GEN_CD::varchar,'|' ORDER by mw.ENTR_CD) MEMCSaleType
+        FROM DISC d
+        left join DISC_SALE_TYPE dst
+	       	on dst.SET_ID = d.SET_ID
+	      	and dst.STRT_DT = d.STRT_DT
+	      	and dst.DISC_ROW_ID = d.DISC_ROW_ID
+	      	AND COALESCE(dst.DLTD_FL ,0) = 0
+      	left join MW_PKGGEN_LKUP_CD mw
+      		on dst.ENTR_CD::varchar = mw.ENTR_CD
+      		AND mw.LEX_ID in (SELECT distinct l.lex_id FROM LEX L
+            LEFT JOIN LKUP_NA LKN
+             ON L.LEX_ID = LKN.LEX_ID
+            LEFT JOIN LKUP_ENTR LE
+             ON LKN.LKUP_NA_ID = LE.LKUP_NA_ID
+            LEFT JOIN LCLZ LZ
+             ON LE.ENTR_VAL = LZ.LEX_ID
+           WHERE L.SRCE_WD = 'DISCOUNT_SALE_TYPE'
+           AND L.DLTD_FL = 0
+           AND LKN.DLTD_FL = 0
+           AND LKN.LKUP_TYP = 'MKT'
+           AND LZ.LCLE_ID = :defaultMktLocale)
+      WHERE  d.set_id       = :v_parentSetId
+      	AND :v_eff_date BETWEEN d.strt_dt AND d.end_dt
+      	AND COALESCE(d.DLTD_FL ,0) = 0
+      group by d.DISC_ROW_ID, d.disc_typ_id, d.STRT_DT, d.disc_ds, d.pc_disc_rate,
+				d.tax_opt, D.DISC_ID, D.DISC_AM_LMT, d.DISC_ALLOWED, d.MEMC
+      ORDER BY d.DISC_ID
+      ) C
+    ON p.disc_row_id = c.disc_row_id
+    LEFT OUTER JOIN
+      (SELECT d.disc_typ_id,
+          d.disc_ds,
+          d.pc_disc_rate,
+          d.tax_opt,
+          d.disc_row_id,d.DISC_ID,
+          d.DISC_AM_LMT,
+          d.DISC_ALLOWED,
+		  d.MEMC,
+		  STRING_AGG (mw.PKG_GEN_CD::varchar,'|' ORDER by mw.ENTR_CD) MEMCSaleType
+        FROM DISC d
+        left join DISC_SALE_TYPE dst
+	       	on dst.SET_ID = d.SET_ID
+	      	and dst.STRT_DT = d.STRT_DT
+	      	and dst.DISC_ROW_ID = d.DISC_ROW_ID
+	      	AND COALESCE(dst.DLTD_FL ,0) = 0
+      	left join MW_PKGGEN_LKUP_CD mw
+      		on dst.ENTR_CD::varchar = mw.ENTR_CD
+      		AND mw.LEX_ID in (SELECT distinct l.lex_id FROM LEX L
+            LEFT JOIN LKUP_NA LKN
+             ON L.LEX_ID = LKN.LEX_ID
+            LEFT JOIN LKUP_ENTR LE
+             ON LKN.LKUP_NA_ID = LE.LKUP_NA_ID
+            LEFT JOIN LCLZ LZ
+             ON LE.ENTR_VAL = LZ.LEX_ID
+           WHERE L.SRCE_WD = 'DISCOUNT_SALE_TYPE'
+           AND L.DLTD_FL = 0
+           AND LKN.DLTD_FL = 0
+           AND LKN.LKUP_TYP = 'MKT'
+           AND LZ.LCLE_ID = :defaultMktLocale)
+      WHERE   d.set_id       = :v_customizeSetId
+      	AND :v_eff_date BETWEEN d.strt_dt AND d.end_dt
+      	AND COALESCE(d.DLTD_FL ,0) = 0
+      group by d.DISC_ROW_ID, d.disc_typ_id, d.STRT_DT, d.disc_ds, d.pc_disc_rate,
+				d.tax_opt, D.DISC_ID, D.DISC_AM_LMT, d.DISC_ALLOWED, d.MEMC
+      ORDER BY d.DISC_ID
+      ) c1
+    ON p.disc_row_id = c1.disc_row_id
+    --)
+       ]]>
+	</discountTableTrue>
+	<discountTableFalse>
+	<![CDATA[
+	 select COALESCE (c.DISC_ID, p.DISC_ID) DISC_ID
+,COALESCE(
+        (SELECT M.PKG_GEN_CD
+        FROM MW_PKGGEN_LKUP_CD M
+        WHERE M.ENTR_VAl = COALESCE(c.DISC_TYP_ID, p.DISC_TYP_ID)
+        ),'' ) DISC_TYP_ID,
+		COALESCE (c.pc_disc_rate, p.pc_disc_rate) pc_disc_rate ,
+		CASE WHEN CASE when COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) = -999 THEN NULL
+ WHEN  COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) IS NULL THEN NULL ELSE COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) END IS NOT NULL	 
+then CASE WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) = -999 THEN NULL  WHEN COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) IS NULL THEN NULL ELSE TRIM
+(TO_CHAR(COALESCE(c.DISC_AM_LMT, p.DISC_AM_LMT) ,'99999990.99')) END
+end as DISC_AM_LMT,
+CASE WHEN CASE when COALESCE(c.MEMC, p.MEMC) = -999 THEN NULL
+ WHEN  COALESCE(c.MEMC, p.MEMC) IS NULL THEN NULL ELSE COALESCE(c.MEMC, p.MEMC) END IS NOT NULL	 
+then CASE when COALESCE(c.MEMC, p.MEMC)  = -999 THEN NULL  WHEN COALESCE(c.MEMC, p.MEMC) IS NULL THEN NULL else
+TRIM(TO_CHAR(COALESCE(c.MEMC, p.MEMC) ,'99999990.99')) END
+end as MEMC,
+case when COALESCE(c.MEMC, p.MEMC) is not null then
+COALESCE(COALESCE (c.MEMCSaleType, p.MEMCSaleType),'') end MEMCSaleType,
+		COALESCE (C.DISC_ALLOWED, P.DISC_ALLOWED) xml2,
+(SELECT MV.PKG_GEN_CD    FROM MW_PKGGEN_LKUP_CD MV  WHERE MV.LEX_ID = 24100 AND cast(MV.ENTR_CD as numeric) =COALESCE (C.DISC_ALLOWED, P.DISC_ALLOWED)) DISC_ALLOWED,		
+		(SELECT MV.PKG_GEN_CD    FROM MW_PKGGEN_LKUP_CD MV  WHERE MV.LEX_ID = 1499 AND cast(MV.ENTR_CD as numeric) = COALESCE (C.TAX_OPT, P.TAX_OPT)) taxoption
+FROM
+      (SELECT d.disc_typ_id,
+          d.disc_ds,
+          d.pc_disc_rate,
+          d.tax_opt,
+          d.disc_row_id,d.DISC_ID,
+          d.DISC_AM_LMT,
+          d.DISC_ALLOWED,
+		  d.MEMC,		  
+			STRING_AGG (mw.PKG_GEN_CD::varchar,'|' ORDER by mw.ENTR_CD) MEMCSaleType
+        FROM DISC d
+        left join DISC_SALE_TYPE dst
+	       	on dst.SET_ID = d.SET_ID
+	      	and dst.STRT_DT = d.STRT_DT
+	      	and dst.DISC_ROW_ID = d.DISC_ROW_ID
+	      	AND COALESCE(dst.DLTD_FL ,0) = 0
+      	left join MW_PKGGEN_LKUP_CD mw
+      		on dst.ENTR_CD::varchar = mw.ENTR_CD
+      		AND mw.LEX_ID in (SELECT distinct l.lex_id FROM LEX L
+            LEFT JOIN LKUP_NA LKN
+             ON L.LEX_ID = LKN.LEX_ID
+            LEFT JOIN LKUP_ENTR LE
+             ON LKN.LKUP_NA_ID = LE.LKUP_NA_ID
+            LEFT JOIN LCLZ LZ
+             ON LE.ENTR_VAL = LZ.LEX_ID
+           WHERE L.SRCE_WD = 'DISCOUNT_SALE_TYPE'
+           AND L.DLTD_FL = 0
+           AND LKN.DLTD_FL = 0
+           AND LKN.LKUP_TYP = 'MKT'
+           AND LZ.LCLE_ID = :defaultMktLocale)
+        WHERE  d.set_id       = :v_parentSetId
+       		AND :v_eff_date BETWEEN d.strt_dt AND d.end_dt
+        	AND COALESCE(d.DLTD_FL ,0) = 0
+	      group by d.DISC_ROW_ID, d.disc_typ_id, d.STRT_DT, d.disc_ds, d.pc_disc_rate,
+				d.tax_opt, D.DISC_ID, D.DISC_AM_LMT, d.DISC_ALLOWED, d.MEMC
+		ORDER BY d.DISC_ID
+        ) p
+      LEFT OUTER JOIN
+        (SELECT d.disc_typ_id,
+          d.disc_ds,
+          d.pc_disc_rate,
+          d.tax_opt,
+          d.disc_row_id,d.DISC_ID,
+          d.DISC_AM_LMT,
+          d.DISC_ALLOWED,
+		  d.MEMC,
+		 STRING_AGG (mw.PKG_GEN_CD::varchar,'|' ORDER by mw.ENTR_CD) MEMCSaleType
+        FROM DISC d
+        left join DISC_SALE_TYPE dst
+	       	on dst.SET_ID = d.SET_ID
+	      	and dst.STRT_DT = d.STRT_DT
+	      	and dst.DISC_ROW_ID = d.DISC_ROW_ID
+	      	AND COALESCE(dst.DLTD_FL ,0) = 0
+      	left join MW_PKGGEN_LKUP_CD mw
+      		on dst.ENTR_CD::varchar = mw.ENTR_CD
+      		AND mw.LEX_ID in (SELECT distinct l.lex_id FROM LEX L
+            LEFT JOIN LKUP_NA LKN
+             ON L.LEX_ID = LKN.LEX_ID
+            LEFT JOIN LKUP_ENTR LE
+             ON LKN.LKUP_NA_ID = LE.LKUP_NA_ID
+            LEFT JOIN LCLZ LZ
+             ON LE.ENTR_VAL = LZ.LEX_ID
+           WHERE L.SRCE_WD = 'DISCOUNT_SALE_TYPE'
+           AND L.DLTD_FL = 0
+           AND LKN.DLTD_FL = 0
+           AND LKN.LKUP_TYP = 'MKT'
+           AND LZ.LCLE_ID = :defaultMktLocale)
+        WHERE   d.set_id       = :v_customizeSetId
+        	AND :v_eff_date BETWEEN d.strt_dt AND d.end_dt
+        	AND COALESCE(d.DLTD_FL ,0) = 0
+      	group by d.DISC_ROW_ID, d.disc_typ_id, d.STRT_DT, d.disc_ds, d.pc_disc_rate,
+				d.tax_opt, D.DISC_ID, D.DISC_AM_LMT, d.DISC_ALLOWED, d.MEMC
+       	ORDER BY d.DISC_ID
+        ) c
+      ON p.disc_row_id = c.disc_row_id]]>
+	</discountTableFalse>
+    <getTaxChainValues>
+    <![CDATA[WITH TaxChain AS(SELECT tax_typ.TAX_TYP_CODE,
+      TAX_CHN_CD ,
+      chain.STUS ,
+      chain.TAX_RULE,
+      SORT_ORD
+    FROM TAX_CHN_ITM chainItem,
+      TAX_CHN chain ,
+      TAX_TYP tax_typ
+      WHERE (chain.SET_ID,chain.TAX_CHN_ID, chain.STRT_DT ) in (:taxChainList) and
+     chain.TAX_CHN_ID      =chainItem.TAX_CHN_ID
+    AND chain.SET_ID          = chainItem.SET_ID
+    AND chain.STRT_DT         = chainItem.STRT_DT
+    AND chain.STUS           IN (1,2)
+    AND chainItem.DLTD_FL     = 0
+   AND chainItem.Tax_typ_id  = tax_typ.tax_typ_id
+   and (tax_typ.TAX_ID, tax_typ.TAX_TYP_ID,tax_typ.STRT_DT) in (:taxTypeList)
+   AND tax_typ.dltd_fl       = 0
+   AND tax_typ.stus          IN (1,2)
+    AND chain.mkt_id          = :mktId)
+    
+  SELECT T.STUS as stus,
+  	coalesce (t.TAX_CHN_CD , 0) as TAX_CHN_CD,
+  	(select lc.srce_wd
+								from lex lc
+								join lkup_entr entr
+								on lc.lex_id=entr.entr_val
+								join lkup_na na
+								on entr.lkup_na_id=na.lkup_na_id
+								join lex l
+								on na.lex_id=l.lex_id
+								where l.lex_id=23231
+								and l.dltd_fl=0
+								and entr.entr_cd= cast(t.TAX_RULE as varchar)
+								limit 1) as rule,
+	String_agg(coalesce(cast(t.TAX_TYP_CODE as varchar), ''),';'  
+  ORDER BY cast(T.SORT_ORD as varchar)) as tax_typ_code 
+  FROM
+    (SELECT TaxChain.TAX_RULE ,
+      TaxChain.TAX_TYP_CODE ,
+      TaxChain.SORT_ORD ,
+      TaxChain.TAX_CHN_CD ,
+      (select pkg_gen_cd from mw_pkggen_lkup_cd mplc where lex_id =37478 and cast(entr_cd as varchar)= COALESCE(cast(TaxChain.STUS as varchar), '')) as stus
+    FROM TaxChain
+    ) t
+  GROUP BY t.STUS ,
+    t.TAX_CHN_CD,
+    t.TAX_RULE]]>
+    </getTaxChainValues>
+    
+    <getProductionPPGGroups>
+    <![CDATA[SELECT COALESCE(R.PMIG_NA,(COALESCE(S.PMIG_NA,M.PMIG_NA))) PMIG_NA,
+CASE (R.IMG_NA,(COALESCE(s.IMG_NA, m.IMG_NA)))  WHEN NULL THEN ' '  ELSE COALESCE(R.IMG_NA,(COALESCE(s.IMG_NA, m.IMG_NA))) END IMG_NA,
+COALESCE(r.data_id,(COALESCE(s.data_id,m.data_id))) pmigGroupId,
+(SELECT String_agg(RTE_ID::varchar , ',' order by RTE_ID::varchar)  PMIG_ROUTES
+        FROM PMI_GRP,
+           RTNG_PKG
+        WHERE PMI_GRP.PMI_GRP_ID  = RTNG_PKG.PMIG_ID
+        AND RTNG_PKG_TYP          = 'PRODUCT_DB'
+        AND RTNG_PKG_TABLE_TYP    = 'KVS_ROUTE'
+        AND rtng_pkg.dltd_fl      = 0
+        AND pmi_grp.dltd_fl       = 0
+        AND rtng_pkg.rtng_set_id IN(:rtngSetIds)
+        AND rtng_pkg.mkt_id       = pmi_grp.mkt_id
+        AND pmi_grp.mkt_id        = :marketId
+        and PMI_GRP.pmi_grp_id = COALESCE(r.data_id,(COALESCE(s.data_id,m.data_id)))) ROUTES
+   FROM (
+    (SELECT lclz.trnsltd_val AS PMIG_NA,
+      COALESCE(
+      (SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = main.IMG_ID AND dltd_fl=0 AND mdia_stus =1 AND mdia_lang = :defaultRestLocale),
+      (SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = main.IMG_ID AND dltd_fl=0 AND mdia_stus =1 AND mdia_lang = :defaultMktLocale)) AS IMG_NA,
+      main.data_id  FROM PMIG main RIGHT OUTER JOIN  lclz ON lclz.lex_id  = main.data_id
+    WHERE main.set_id = (select s.set_id  from sets s  where s.typ = 5008  and s.mkt_id = :marketId  and s.dltd_fl = 0) AND lclz.lcle_id= :defaultMktLocale 
+    AND main.mkt_id= :marketId  AND main.DLTD_FL      = 0
+    ) M
+  LEFT OUTER JOIN
+    (SELECT lclz.trnsltd_val AS PMIG_NA,
+      COALESCE((SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = a.IMG_ID AND dltd_fl =0 AND mdia_stus =1 AND mdia_lang = :defaultRestLocale),
+          (SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = a.IMG_ID AND dltd_fl=0  AND mdia_stus =1 AND mdia_lang = :defaultMktLocale )) AS IMG_NA,
+      a.data_id FROM PMIG a RIGHT OUTER JOIN lclz ON lclz.lex_id  = a.data_id
+    WHERE a.set_id = :parentSetId       AND lclz.lcle_id = :defaultMktLocale
+
+    ) S
+  ON M.DATA_ID = S.DATA_ID
+  LEFT OUTER JOIN
+    (SELECT lclz.trnsltd_val AS PMIG_NA,
+      COALESCE((SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = a.IMG_ID AND dltd_fl   =0 AND mdia_stus =1 AND mdia_lang = :defaultRestLocale),
+          (SELECT mdia_file_na FROM rfm_mdia WHERE lgl_id  = a.IMG_ID AND dltd_fl   =0 AND mdia_stus =1 AND mdia_lang = :defaultMktLocale)) AS IMG_NA,
+      a.data_id  FROM PMIG a RIGHT OUTER JOIN   lclz ON lclz.lex_id   = a.data_id
+    WHERE a.set_id = :customizedSetId    AND lclz.lcle_id  = :defaultMktLocale
+    )R
+  ON M.DATA_ID = R.DATA_ID)
+  WHERE COALESCE(R.IMG_NA,(COALESCE(s.IMG_NA, m.IMG_NA))) IS NOT NULL
+  ORDER BY S.PMIG_NA]]>
+    </getProductionPPGGroups>
+    
+    <getCouponTenderTypesSet>
+        <![CDATA[   SELECT pren_set_id,
+                           cusm_set_id
+                    FROM REST_DATA
+                    WHERE REST_ID = :restId
+                      AND REST_INST_ID = :restInstId
+                      AND asn_set_typ = 6012
+                      AND dltd_fl = 0]]>
+    </getCouponTenderTypesSet>
+    
+     <getCouponTenderTypeList>
+    <![CDATA[select (SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 110
+    AND cast(MV.ENTR_CD as numeric) = COALESCE(COALESCE(c.STUS, p.STUS),m.STUS)) as stus,
+COALESCE(COALESCE(c.TEND_ID,p.TEND_ID),m.TEND_ID) as TEND_ID,
+COALESCE(COALESCE(c.FISC_INDX,p.FISC_INDX),m.FISC_INDX) as FISC_INDX,
+COALESCE(COALESCE(c.TEND_NA,p.TEND_NA),m.TEND_NA) as TEND_NA,
+COALESCE(COALESCE(c.CHG_TEND_TYP_ID, p.CHG_TEND_TYP_ID), m.CHG_TEND_TYP_ID) as CHG_TEND_TYP_ID,
+(SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1389
+    AND MV.ENTR_CD  =(COALESCE(COALESCE(c.TEND_CHG_TYP, p.TEND_CHG_TYP),m.TEND_CHG_TYP))) as TEND_CHG_TYP,
+(SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 63861
+    AND cast(MV.ENTR_CD as numeric ) = COALESCE(COALESCE(COALESCE(c.RND_TO_MIN_AM, p.RND_TO_MIN_AM),m.RND_TO_MIN_AM),1)) as RND_TO_MIN_AM,
+COALESCE(COALESCE(c.MAX_CHG_ALLW,p.MAX_CHG_ALLW),m.MAX_CHG_ALLW) as MAX_CHG_ALLW,
+(SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1899
+    and cast(MV.ENTR_CD as numeric )  = COALESCE(COALESCE(c.TEND_CAT,p.TEND_CAT),m.TEND_CAT)) as TEND_CAT,
+COALESCE(COALESCE(C.NOT_OPEN_DRWR,P.NOT_OPEN_DRWR),M.NOT_OPEN_DRWR) as NOT_OPEN_DRWR,
+COALESCE(COALESCE(C.IS_BANK_CHECK,P.IS_BANK_CHECK), M.IS_BANK_CHECK) as IS_BANK_CHECK,
+COALESCE(COALESCE(C.INCLD_IN_DPST,P.INCLD_IN_DPST), M.INCLD_IN_DPST) as INCLD_IN_DPST,
+COALESCE(COALESCE(C.NO_SKIM,P.NO_SKIM), M.NO_SKIM) as NO_SKIM,
+(SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1499
+    AND cast(MV.ENTR_CD as numeric )  = COALESCE(COALESCE(c.TAX_OPT, p.TAX_OPT),m.TAX_OPT)) as TAX_OPT,
+(SELECT MV.PKG_GEN_CD 
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = 1499
+    AND cast(MV.ENTR_CD as numeric )  = COALESCE(COALESCE(c.TAX_STOT_OPT, p.TAX_STOT_OPT),m.TAX_STOT_OPT)) as TAX_STOT_OPT,
+COALESCE(
+      CASE
+        WHEN c.SKIM_LMT= -999
+        THEN 0
+        WHEN c.SKIM_LMT IS NOT NULL
+        THEN c.SKIM_LMT
+        WHEN c.SKIM_LMT IS NULL
+        THEN CASE COALESCE(p.SKIM_LMT, m.SKIM_LMT) WHEN -999 THEN 0 ELSE COALESCE(p.SKIM_LMT, m.SKIM_LMT) END
+      END,NULL) as SKIM_LMT,
+COALESCE(
+      CASE
+        WHEN c.HALO_LMT= -999
+        THEN 0
+        WHEN c.HALO_LMT IS NOT NULL
+        THEN c.HALO_LMT
+        WHEN c.HALO_LMT IS NULL
+        THEN CASE COALESCE(p.HALO_LMT, m.HALO_LMT) WHEN -999 THEN 0 ELSE COALESCE(p.HALO_LMT, m.HALO_LMT) END
+      END,NULL) as HALO_LMT,
+COALESCE(
+      CASE
+        WHEN c.CURN_DCMLS= -999
+        THEN 0
+        WHEN c.CURN_DCMLS IS NOT NULL
+        THEN c.CURN_DCMLS
+        WHEN c.CURN_DCMLS IS NULL
+        THEN CASE COALESCE(p.CURN_DCMLS, m.CURN_DCMLS) WHEN -999 THEN 0 ELSE COALESCE(p.CURN_DCMLS, m.CURN_DCMLS) END
+      END,0) as CURN_DCMLS,
+COALESCE(COALESCE(C.TEND_CAT, P.TEND_CAT),M.TEND_CAT) as TEND_CATID,
+COALESCE(COALESCE(COALESCE(CASE C.LGCY_ID WHEN '@#&@#&@#&' THEN NULL ELSE C.LGCY_ID END, CASE P.LGCY_ID WHEN '@#&@#&@#&' THEN NULL ELSE P.LGCY_ID END),M.LGCY_ID),'0') as LGCY_ID,
+CASE
+        WHEN c.AM=                  -999
+        THEN CASE COALESCE(p.AM, m.AM) WHEN -999 THEN COALESCE(m.AM, p.AM) ELSE (COALESCE(p.AM, m.AM)) END
+        WHEN c.AM IS NOT NULL
+        THEN c.AM
+        WHEN c.AM IS NULL
+        THEN CASE COALESCE(P.AM, M.AM) WHEN -999 THEN COALESCE(M.AM, P.AM) ELSE (COALESCE(P.AM, M.AM)) END
+      END  as AM,
+(SELECT MV.PKG_GEN_CD
+  FROM MW_PKGGEN_LKUP_CD MV
+  WHERE MV.LEX_ID = (SELECT lex_id
+           FROM MKT_LKUP m, LKUP_TYP l
+      WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90005 AND l.DLTD_FL = 0)
+    AND cast(MV.ENTR_CD as numeric)  = m.tend_rndg_rule) as tend_rndg_rule,
+m.MIN_CLTNG_AM as MIN_CLTNG_AM
+FROM
+      (SELECT STUS,
+        TEND_ID,
+        FISC_INDX,
+        TEND_NA,
+        CHG_TEND_TYP_ID,
+        TEND_CHG_TYP,
+        RND_TO_MIN_AM,
+        MAX_CHG_ALLW,
+        TEND_CAT,
+        NOT_OPEN_DRWR,
+        INCLD_IN_DPST,
+        IS_BANK_CHECK,
+        NO_SKIM,
+        TAX_OPT,
+        TAX_STOT_OPT,
+        SKIM_LMT,
+        HALO_LMT,
+        CURN_DCMLS,
+        LGCY_ID,
+        AM ,
+        tt.tend_typ_id,
+        tt.tend_rndg_rule tend_rndg_rule,
+        tt.min_cltng_am
+      FROM
+        TEND_TYP tt
+      WHERE tt.set_id=:masterSetID
+          AND tt.sub_typ=4001
+          AND tt.mkt_id=:mktId
+          AND :effectiveDate between tt.strt_dt and tt.end_dt
+          AND COALESCE(tt.DLTD_FL ,0) = 0
+      AND tt.tend_id        IS NOT NULL
+      )m
+    INNER JOIN
+      (SELECT STUS,
+        TEND_ID,
+        FISC_INDX,
+        TEND_NA,
+        CHG_TEND_TYP_ID,
+        TEND_CHG_TYP,
+        RND_TO_MIN_AM,
+        MAX_CHG_ALLW,
+        TEND_CAT,
+        NOT_OPEN_DRWR,
+        INCLD_IN_DPST,
+        IS_BANK_CHECK,
+        NO_SKIM,
+        TAX_OPT,
+        TAX_STOT_OPT,
+        SKIM_LMT,
+        HALO_LMT,
+        CURN_DCMLS,
+        LGCY_ID,
+        AM ,
+        TEND_TYP_ID,
+        tend_rndg_rule,
+        min_cltng_am
+      FROM TEND_TYP TT
+      WHERE tt.set_id= :couponParentSetId
+        AND tt.mkt_id= :mktId
+        AND :effectiveDate between tt.strt_dt and tt.end_dt
+      AND COALESCE(tt.DLTD_FL ,0) = 0
+      ) p
+    ON m.TEND_TYP_ID = p.TEND_TYP_ID
+    LEFT OUTER JOIN
+      (SELECT STUS,
+        TEND_ID,
+        FISC_INDX,
+        TEND_NA,
+        CHG_TEND_TYP_ID,
+        TEND_CHG_TYP,
+        RND_TO_MIN_AM,
+        MAX_CHG_ALLW,
+        TEND_CAT,
+        NOT_OPEN_DRWR,
+        INCLD_IN_DPST,
+        IS_BANK_CHECK,
+        NO_SKIM,
+        TAX_OPT,
+        TAX_STOT_OPT,
+        SKIM_LMT,
+        HALO_LMT,
+        CURN_DCMLS,
+        LGCY_ID,
+        AM ,
+        TEND_TYP_ID,
+        tend_rndg_rule,
+        min_cltng_am,
+        strt_dt,
+        end_dt
+      FROM TEND_TYP TT
+      WHERE tt.set_id= :couponChildSetId
+      AND COALESCE(tt.DLTD_FL ,0) = 0
+      )c
+      ON m.TEND_TYP_ID = c.TEND_TYP_ID
+	  where COALESCE(Coalesce(c.STUS,p.STUS),m.stus) =1
+	  and :effectiveDate between c.strt_dt and c.end_dt
+	  ORDER BY COALESCE(COALESCE(c.TEND_ID,p.TEND_ID),m.TEND_ID)]]>
+    </getCouponTenderTypeList>
+
+	<isHotSelected>
+	<![CDATA[select 1 as isHotSelected
+      FROM rest_pod rp, MW_PKGGEN_LKUP_CD p
+      WHERE
+       p.lex_id        = 90015 and p.PKG_GEN_CD = 'HOT'
+      AND rp.REST_ID      = :restId
+      AND rp.REST_INST_ID = :restInstId
+      AND rp.DLTD_FL      = 0 and  rp.POD_ID  = p.entr_cd::INTEGER
+      ]]></isHotSelected>  
+      
+                <getPkgConfigurationAdapt>
+    <![CDATA[  SELECT MSCTC.MKT_CNFG_TYP_ID , SCT.XML_NEWPOS_TAG 
+        FROM MKT_STRDB_CNFG_TYP_CNTL MSCTC,
+          STRDB_CNFG_TYP SCT
+        WHERE MSCTC.MKT_ID    = :mktId
+        AND MSCTC.CNFG_TYP_ID = SCT.CNFG_TYP_ID
+        AND MSCTC.DLTD_FL     = 0
+        AND MSCTC.STUS        = 1
+        AND SCT.STUS          =1
+        AND SCT.DLTD_FL       =0 order by MSCTC.cnfg_typ_id]]>
+    </getPkgConfigurationAdapt>
+    <getPkgSection>
+     <![CDATA[SELECT MKT_CNFG_SECT_ID ,
+          MKT_CNFG_TYP_ID , CNFG_SECT_NA 
+                         FROM(
+                         SELECT MSCSC.MKT_CNFG_SECT_ID ,
+          MSCSC.MKT_CNFG_TYP_ID ,
+                           CASE WHEN :countryCodeFlag = 'true' AND  LOWER(SCS.CNFG_SECT_NA) LIKE 'imagedb_%' AND LOWER(SCT.XML_NEWPOS_TAG) = 'store.wide' THEN
+                                         SCS.CNFG_SECT_NA || '_' || :countryId 
+                           ELSE
+                           SCS.CNFG_SECT_NA END  as CNFG_SECT_NA
+        FROM MKT_STRDB_CNFG_SECT_CNTL MSCSC,
+          STRDB_CNFG_SECT SCS,
+          STRDB_CNFG_TYP SCT
+        WHERE MSCSC.CNFG_SECT_ID   = SCS.CNFG_SECT_ID
+        AND MSCSC.MKT_CNFG_TYP_ID = (select MKT_CNFG_TYP_ID from MKT_STRDB_CNFG_TYP_CNTL msctc where msctc.cnfg_typ_id =  SCT.CNFG_TYP_ID and msctc.mkt_id = :mktId)
+        AND MSCSC.STUS    = 1
+        AND MSCSC.DLTD_FL = 0
+        AND SCS.STUS      = 1
+                         AND SCT.STUS          =1
+        AND SCT.DLTD_FL       =0
+        AND MSCSC.MKT_ID    = :mktId
+                         ) as m ]]>
+    </getPkgSection>
+    <getPkgParameters>
+     <![CDATA[
+ 
+ with parms_inac as (
+           --Customized parameter at restaurant profile screen
+           select rpsx.parm_id from rest_prof_custom_parm_stus rpsx
+			                  where rpsx.rest_id = :restId 
+	                                        and rpsx.rest_inst_id = :restInstId
+	                                        and rpsx.dltd_fl = 0
+	                                        and rpsx.mkt_id = :mktId 
+	                                        AND rpsx.stus = 0
+																					and exists (
+																							SELECT 1
+																							FROM mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT null and x.feat_typ = f.param_feat_id and x.cnfg_parm_id = rpsx.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rpsx.mkt_id
+																							UNION
+																							SELECT 1
+																							FROM mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT NULL  and x.feat_typ = f.param_feat_id  and x.adptr_parm_id = rpsx.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rpsx.mkt_id
+																						)
+	                  union
+	                  --The parameter is not inactivated at set level
+	        select rs.parm_id
+                         from rest_set_custom_parm_stus rs, rest_data rd
+		                  WHERE rd.rest_id    = :restId
+		                  AND rd.rest_inst_id = :restInstId
+		                  AND rd.dltd_fl      = 0
+		                  AND rd.asn_set_typ  = 6031
+		                  AND rs.set_id       = rd.pren_set_id
+		                  AND :effectiveDate  BETWEEN rs.strt_dt AND rs.end_dt
+		                  and rd.dltd_fl      = 0
+		                  AND rs.stus         = 0
+		                  and rs.mkt_id       = :mktId 
+                      and rs.dltd_fl      = 0
+                      and exists (
+                          SELECT 1
+                          FROM mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT null and x.feat_typ = f.param_feat_id and x.cnfg_parm_id = rs.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rs.mkt_id
+                          UNION
+                          SELECT 1
+                          FROM mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT NULL  and x.feat_typ = f.param_feat_id  and x.adptr_parm_id = rs.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rs.mkt_id
+                        )
+		                  and not exists (select 1 from rest_prof_custom_parm_stus rpsx
+			                  where rpsx.rest_id = :restId
+	                                        and rpsx.rest_inst_id = :restInstId 
+	                                        and rpsx.dltd_fl = 0
+	                                        and rpsx.mkt_id = :mktId
+                                          and rpsx.stus <> 0
+	                                        AND rpsx.parm_id =rs.parm_id
+																					and exists (
+																							SELECT 1
+																							FROM mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT null and x.feat_typ = f.param_feat_id and x.cnfg_parm_id = rpsx.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rpsx.mkt_id
+																							UNION
+																							SELECT 1
+																							FROM mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f WHERE feat_typ IS NOT NULL  and x.feat_typ = f.param_feat_id  and x.adptr_parm_id = rpsx.parm_id and f.rest_id = :restId and f.rest_inst_id = :restInstId AND f.dltd_fl = 0 AND x.dltd_fl = 0 and x.mkt_id = rpsx.mkt_id
+																						)
+	                                        )
+        ),
+        rest_feat AS (
+			SELECT param_feat_id, rest_id,rest_inst_id 
+			FROM rest_param_feat f
+			WHERE rest_id= :restId
+			  AND rest_inst_id = :restInstId 
+			  and dltd_fl = 0) ,
+			 params AS (                                                                                                     
+			SELECT conf.cnfg_parm_id param_id,   6006001 parm_typ, mkt_cnfg_parm_id data_id, rest_id,rest_inst_id 
+			  FROM mkt_strdb_cnfg_parm_cntl conf, rest_feat f
+			  WHERE conf.cust_stus = 1
+			  AND conf.dltd_fl   = 0
+			  AND conf.stus      = 1
+			  AND conf.feat_typ = f.param_feat_id
+			  AND conf.mkt_id = :mktId union
+			SELECT adap.adptr_parm_id parm_id, 6006002 parm_typ, mkt_adptr_parm_id data_id, rest_id,rest_inst_id 
+			  FROM mkt_strdb_adptr_parm_cntl adap , rest_feat f
+			  WHERE adap.cust_stus = 1
+			  AND adap.dltd_fl   = 0
+			  AND adap.stus      = 1
+			  AND adap.feat_typ = f.param_feat_id
+			  AND adap.mkt_id = :mktId 
+		) ,
+		PKG_PARM_SET_DAT as (SELECT rf.data_id,
+			       parmval.set_id,
+			       parmval.strt_dt,
+			       rf.parm_typ,
+			       
+			       coalesce (rpcpv.parm_id, parmval.parm_id) parm_id,
+			       'A' orderstatus,
+			       coalesce (rpcpv.parm_val, parmval.parm_val) parm_val
+			FROM params rf
+			INNER JOIN rest_data rd
+			    ON  rd.rest_id    = rf.rest_id
+			    AND rd.rest_inst_id = rf.rest_inst_id
+			    AND rd.dltd_fl      = 0                                                                             
+			    AND rd.asn_set_typ  = 6031
+			left outer  JOIN rest_set_custom_parm_val parmval
+			    ON  parmval.dltd_fl = 0
+			    AND parmval.mkt_id = :mktId 
+			    AND parmval.set_id   = rd.pren_set_id
+			    AND  :effectiveDate BETWEEN parmval.strt_dt AND parmval.end_dt
+			    AND parmval.parm_id = rf.param_id  
+	       left outer join rest_prof_custom_parm_val rpcpv on rpcpv.rest_id = rd.rest_id
+		        and rpcpv.REST_INST_ID = rd.REST_INST_ID
+		        AND rpcpv.parm_id = rf.param_id  
+		         and  rpcpv.mkt_id  = :mktId
+		        and rpcpv.dltd_fl = 0
+			where parmval.parm_val is not null 
+		        or rpcpv.parm_val is not null)
+        SELECT MSCPC.MKT_CNFG_SECT_ID ,
+          p.dspl_ord ,
+          P.XML_NEWPOS_TAG as name,
+          p.data_typ,
+           case when (:paramValue = 'Y' or :paramValue ='y') and P.XML_NEWPOS_TAG ='initialFloat' then 
+           case when P.XML_NEWPOS_TAG ='initialFloat' then
+           CASE WHEN (SELECT scs.cnfg_sect_na
+                  FROM MKT_STRDB_CNFG_SECT_CNTL scs
+                  WHERE scs.mkt_cnfg_sect_id = MSCPC.MKT_CNFG_SECT_ID
+                  AND scs.stus               = 1
+                  AND scs.dltd_fl            = 0 ) = 'Cash'
+                AND (SELECT SCT.CNFG_TYP_NA
+                  FROM mkt_strdb_cnfg_typ_cntl sct
+                  WHERE sct.mkt_cnfg_typ_id IN
+                   (SELECT mkt_cnfg_typ_id
+                    FROM (SELECT MKT_CNFG_SECT_ID ,
+          MKT_CNFG_TYP_ID , CNFG_SECT_NA 
+                         FROM(
+                         SELECT MSCSC.MKT_CNFG_SECT_ID ,
+          MSCSC.MKT_CNFG_TYP_ID ,
+                           CASE WHEN :countryCodeFlag = 'true' AND  LOWER(SCS.CNFG_SECT_NA) LIKE 'imagedb_%' AND LOWER(SCT.XML_NEWPOS_TAG) = 'store.wide' THEN
+                                         SCS.CNFG_SECT_NA || '_' || :countryId 
+                           ELSE
+                           SCS.CNFG_SECT_NA END  as CNFG_SECT_NA
+        FROM MKT_STRDB_CNFG_SECT_CNTL MSCSC,
+          STRDB_CNFG_SECT SCS,
+          STRDB_CNFG_TYP SCT
+        WHERE MSCSC.CNFG_SECT_ID   = SCS.CNFG_SECT_ID
+        AND MSCSC.MKT_CNFG_TYP_ID = (select MKT_CNFG_TYP_ID from MKT_STRDB_CNFG_TYP_CNTL msctc where msctc.cnfg_typ_id =  SCT.CNFG_TYP_ID and msctc.mkt_id = :mktId)
+        AND MSCSC.STUS    = 1
+        AND MSCSC.DLTD_FL = 0
+        AND SCS.STUS      = 1
+                         AND SCT.STUS          =1
+        AND SCT.DLTD_FL       =0
+        AND MSCSC.MKT_ID    = :mktId
+                         ) as m) as l
+                    WHERE MKT_CNFG_SECT_ID = MSCPC.MKT_CNFG_SECT_ID
+                    ))           = 'POS' 
+                    then :initialFloatAmount 
+                    ELSE 
+                    (case p.DATA_TYP 
+        when '3' 
+       then case when (select ML.PKG_GEN_Cd  from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = p.LEX_ID and ml.entr_cd  = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL)) ='' then  (SELECT  l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =p.LEX_ID AND le.Entr_cd = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0) else  (SELECT ML.PKG_GEN_Cd from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = p.LEX_ID and ml.entr_cd  = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL)) end
+   	when '5' then
+	    case when PPSD.PARM_VAL = '' THEN ( select mdia_file_na 
+			FROM rfm_mdia
+			where  cast(mdia_id as varchar) =  cast(MSCPC.mdia_id  as varchar) )                                                     
+	          
+          else
+             ( select mdia_file_na 
+			FROM rfm_mdia
+			where  cast(mdia_id as varchar) =  PPSD.PARM_VAL  )     
+	      end 
+		  
+	    
+	   else 
+	COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL) 
+	   end )
+            end 
+            end 
+           ELSE 
+          (case p.DATA_TYP 
+        when '3' 
+       then case when (select ML.PKG_GEN_Cd  from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = p.LEX_ID and ml.entr_cd  = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL)) ='' then  (SELECT  l.trnsltd_val
+  FROM lkup_na ln INNER JOIN lkup_entr le ON ln.LKUP_NA_ID = le.LKUP_NA_ID
+  	   		   	  INNER JOIN lclz l ON le.entr_val = l.lex_id
+ WHERE ln.lex_id =p.LEX_ID AND le.Entr_cd = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL)
+   AND l.lcle_id = (SELECT lcle_id
+                      FROM mkt_lcl
+                     WHERE mkt_id =  :mktId  AND dflt = 1 AND dltd_fl = 0) AND le.dltd_fl = 0) else (SELECT ML.PKG_GEN_Cd from MW_PKGGEN_LKUP_CD ML        
+      WHERE ML.LEX_ID = p.LEX_ID and ml.entr_cd  = COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL))  end
+   	when '5' then
+	    case when PPSD.PARM_VAL = '' THEN ( select mdia_file_na 
+			FROM rfm_mdia
+			where  cast(mdia_id as varchar) =  cast(MSCPC.mdia_id  as varchar) )                                                     
+	          
+          else
+             ( select mdia_file_na 
+			FROM rfm_mdia
+			where  cast(mdia_id as varchar) =  PPSD.PARM_VAL  )     
+	      end 
+		  
+	    
+	   else 
+	COALESCE(PPSD.PARM_VAL,MSCPC.DEF_VAL) 
+	   end )
+          end  AS VALUE
+            
+           FROM STRDB_CNFG_PARM_VAL SCPV,
+          STRDB_CNFG_PARM_DEF SCPD,
+          PARM P,
+          MKT_STRDB_CNFG_PARM_CNTL MSCPC
+          left outer join 
+         (SELECT PARM_VAL, PARM_ID
+          FROM PKG_PARM_SET_DAT,
+            MKT_STRDB_CNFG_PARM_CNTL,
+            REST_PARAM_FEAT f
+          WHERE 
+          PKG_PARM_SET_DAT.PARM_ID            = MKT_STRDB_CNFG_PARM_CNTL.CNFG_PARM_ID
+          AND MKT_STRDB_CNFG_PARM_CNTL.FEAT_TYP  <> 1
+          AND MKT_STRDB_CNFG_PARM_CNTL.CUST_STUS <>0
+          AND MKT_STRDB_CNFG_PARM_CNTL.MKT_ID    = :mktId
+          and MKT_STRDB_CNFG_PARM_CNTL.feat_typ IS NOT NULL
+          and MKT_STRDB_CNFG_PARM_CNTL.feat_typ = f.param_feat_id
+          and f.rest_id = :restId
+          and f.rest_inst_id = :restInstId
+          and f.dltd_fl = 0
+          ) PPSD
+        ON MSCPC.CNFG_PARM_ID       = PPSD.PARM_ID
+        WHERE SCPV.CNFG_PARM_ID     = MSCPC.CNFG_PARM_ID
+        AND SCPD.CNFG_PARM_ID       = MSCPC.CNFG_PARM_ID
+         and  MSCPC.MKT_CNFG_SECT_ID in
+         (SELECT MKT_CNFG_SECT_ID FROM (SELECT MKT_CNFG_SECT_ID ,
+          MKT_CNFG_TYP_ID , CNFG_SECT_NA 
+                         FROM(
+                         SELECT MSCSC.MKT_CNFG_SECT_ID ,
+          MSCSC.MKT_CNFG_TYP_ID ,
+                           CASE WHEN :countryCodeFlag = 'true' AND  LOWER(SCS.CNFG_SECT_NA) LIKE 'imagedb_%' AND LOWER(SCT.XML_NEWPOS_TAG) = 'store.wide' THEN
+                                         SCS.CNFG_SECT_NA || '_' || :countryId 
+                           ELSE
+                           SCS.CNFG_SECT_NA END  as CNFG_SECT_NA
+        FROM MKT_STRDB_CNFG_SECT_CNTL MSCSC,
+          STRDB_CNFG_SECT SCS,
+          STRDB_CNFG_TYP SCT
+        WHERE MSCSC.CNFG_SECT_ID   = SCS.CNFG_SECT_ID
+        AND MSCSC.MKT_CNFG_TYP_ID = (select MKT_CNFG_TYP_ID from MKT_STRDB_CNFG_TYP_CNTL msctc where msctc.cnfg_typ_id =  SCT.CNFG_TYP_ID and msctc.mkt_id = :mktId)
+        AND MSCSC.STUS    = 1
+        AND MSCSC.DLTD_FL = 0
+        AND SCS.STUS      = 1
+                         AND SCT.STUS          =1
+        AND SCT.DLTD_FL       =0
+        AND MSCSC.MKT_ID    = :mktId
+                         ) as d) as e
+          )
+        AND SCPD.PARM_ID  = P.PARM_ID
+        AND MSCPC.DLTD_FL = 0
+          and MSCPC.mkt_id           =:mktId  
+        AND MSCPC.STUS    = 1
+        AND P.STUS        =1
+        AND P.DLTD_FL     =0
+
+        and p.parm_id not in (select parm_id from parms_inac) ORDER BY dspl_ord nulls FIRST,
+           CASE
+           WHEN P.XML_NEWPOS_TAG  = UPPER(P.XML_NEWPOS_TAG) THEN 1
+           WHEN LEFT(P.XML_NEWPOS_TAG,1) = UPPER(LEFT(P.XML_NEWPOS_TAG,1)) THEN 2
+           else 3
+       END ,P.XML_NEWPOS_TAG
+     ]]>
+    </getPkgParameters>  
+
+      
+      <getColorDb>
+	<![CDATA[select
+	trnsltd_val,
+	hxcd
+from
+	(
+	select
+		colr_id,
+		hxcd,
+		coalesce (rest_lclz.trnsltd_val,
+		coalesce (mkt_lclz.trnsltd_val,
+		gbl_lclz.trnsltd_val)) as trnsltd_val
+	from
+		(
+		select
+			COLR_ID,
+			HXCD
+		from
+			colr
+		where
+			dltd_fl = 0
+			and mkt_id in (0,:marketId)
+        ) c
+	left outer join lclz gbl_lclz
+      on
+		gbl_lclz.lex_id = c.colr_id
+		and gbl_lclz.lcle_id =(
+		select
+			lcle_id
+		from
+			mkt_lcl
+		where
+			mkt_id = 0
+			and dltd_fl = 0
+			and dflt = 1)
+	left outer join lclz mkt_lclz
+      on
+		mkt_lclz.lex_id = c.colr_id
+		and mkt_lclz.lcle_id =(
+		select
+			lcle_id
+		from
+			mkt_lcl
+		where
+			mkt_id =:marketId
+			and dltd_fl = 0
+			and dflt = 1)
+	left outer join lclz rest_lclz
+      on
+		rest_lclz.lex_id = c.colr_id
+		and rest_lclz.lcle_id =(
+		select
+			coalesce (CUST.Lang_Id,
+			MAST.Lang_Id) Restdefaultlang
+		from
+			(
+			select
+				Lang_Id,
+				'A' as cust_fl
+			from
+				Rest_Lclz_Info
+			where
+				Set_Id = :parentSetId
+				and :effectiveDate between Strt_Dt and End_Dt
+				and Dltd_Fl = 0
+        ) MAST
+		left outer join (
+			select
+				Lang_Id,
+				'C' as Cust_Fl
+			from
+				Rest_Lclz_Info
+			where
+				Set_Id = :childSetId
+				and Dltd_Fl = 0
+        ) CUST
+       on
+			1 = 1))col
+      ]]>
+      </getColorDb>   
+         
+
+       <getStoreDBVersion>
+  <![CDATA[
+  		SELECT PARAM_VALUE PACKAGE_DATA_STORE_DB_XML_VERSION
+			FROM GLOBAL_PARAM
+			WHERE PARAM_NAME = 'PACKAGE_DATA_STORE_DB_XML_VERSION'
+			AND  MKT_ID=:marketId
+			AND dltd_fl      =0 ]]>
+	</getStoreDBVersion>
+	
+	<getAdaptorDataList>
+        <![CDATA[   SELECT MSATC.MKT_ADPTR_TYP_ID as MKT_ADPTR_TYP_ID  ,
+           SAT.XML_NEWPOS_TAG as XML_NEWPOS_TAG , 
+CASE sat.STRT_ON_LOAD WHEN 1 THEN 'true'  ELSE 'true' END as STRT_ON_LOAD
+        FROM MKT_STRDB_ADPTR_TYP_CNTL MSATC,
+          STRDB_ADPTR_TYP sat
+        WHERE MSATC.MKT_ID     = :mktId
+        AND MSATC.STUS         = 1
+        AND MSATC.ADPTR_TYP_ID = sat.ADPTR_TYP_ID
+        AND SAT.STUS           =1
+        AND SAT.DLTD_FL        =0]]>
+    </getAdaptorDataList>
+    
+    <getsectionDataList>
+        <![CDATA[   SELECT MSASC.MKT_ADPTR_SECT_ID as MKT_ADPTR_SECT_ID  ,
+          MSASC.MKT_ADPTR_TYP_ID as MKT_ADPTR_TYP_ID  ,
+          SAS.ADPTR_SECT_NA as ADPTR_SECT_NA 
+        FROM MKT_STRDB_ADPTR_SECT_CNTL MSASC,
+          STRDB_ADPTR_SECT SAS
+       WHERE  MSASC.ADPTR_SECT_ID = SAS.ADPTR_SECT_ID
+        AND MSASC.DLTD_FL       = 0
+        AND MSASC.STUS          = 1
+        AND sas.stus            =1
+        AND sas.dltd_fl         =0]]>
+    </getsectionDataList>
+    
+    <getParamsDataList>
+        <![CDATA[   select
+	MSAPC.MKT_ADPTR_SECT_ID ,
+	p.dspl_ord ,
+	p.XML_NEWPOS_TAG as name,
+	(case
+		p.DATA_TYP when '3' then
+		case
+			when (
+			select
+				ML.PKG_GEN_Cd
+			from
+				MW_PKGGEN_LKUP_CD ML
+			where
+				ML.LEX_ID = p.LEX_ID
+				and ml.entr_cd = coalesce(PPSD.PARM_VAL, MSAPC.DEF_VAL)) = '' then (
+			select
+				l.trnsltd_val
+			from
+				lkup_na ln
+			inner join lkup_entr le on
+				ln.LKUP_NA_ID = le.LKUP_NA_ID
+			inner join lclz l on
+				le.entr_val = l.lex_id
+			where
+				ln.lex_id = p.LEX_ID
+				and le.Entr_cd = coalesce(PPSD.PARM_VAL, MSAPC.DEF_VAL)
+				and l.lcle_id = (
+				select
+					lcle_id
+				from
+					mkt_lcl
+				where
+					mkt_id = :mkt_id
+					and dflt = 1
+					and dltd_fl = 0)
+				and le.dltd_fl = 0)
+			else (
+			select
+				ML.PKG_GEN_Cd
+			from
+				MW_PKGGEN_LKUP_CD ML
+			where
+				ML.LEX_ID = p.LEX_ID
+				and ml.entr_cd = coalesce(PPSD.PARM_VAL, MSAPC.DEF_VAL))
+		end
+		when '5' then
+		case
+			when PPSD.PARM_VAL = '' then (
+			select
+				mdia_file_na
+			from
+				rfm_mdia
+			where
+				cast(mdia_id as varchar) = cast(MSAPC.mdia_id as varchar) )
+			else (
+			select
+				mdia_file_na
+			from
+				rfm_mdia
+			where
+				cast(mdia_id as varchar) = PPSD.PARM_VAL )
+		end
+		else coalesce(PPSD.PARM_VAL, MSAPC.DEF_VAL)
+	end ) as value
+from
+	STRDB_ADPTR_PARM_DEF_DB SAPD,
+	PARM P,
+	MKT_STRDB_ADPTR_PARM_CNTL MSAPC
+left outer join (with rest_feat as (
+	select
+		param_feat_id, rest_id, rest_inst_id
+	from
+		rest_param_feat f
+	where
+		rest_id = :rest_id
+		and rest_inst_id = :rest_inst_id
+		and dltd_fl = 0) , params as (
+	select
+		conf.cnfg_parm_id param_id, 6006001 parm_typ, mkt_cnfg_parm_id data_id, rest_id, rest_inst_id
+	from
+		mkt_strdb_cnfg_parm_cntl conf, rest_feat f
+	where
+		conf.cust_stus = 1
+		and conf.dltd_fl = 0
+		and conf.stus = 1
+		and conf.feat_typ = f.param_feat_id
+		and conf.mkt_id = :mkt_id
+union
+	select
+		adap.adptr_parm_id parm_id, 6006002 parm_typ, mkt_adptr_parm_id data_id, rest_id, rest_inst_id
+	from
+		mkt_strdb_adptr_parm_cntl adap , rest_feat f
+	where
+		adap.cust_stus = 1
+		and adap.dltd_fl = 0
+		and adap.stus = 1
+		and adap.feat_typ = f.param_feat_id
+		and adap.mkt_id = :mkt_id)
+	select
+		rf.data_id, parmval.set_id, parmval.strt_dt, rf.parm_typ, coalesce(rpcpv.parm_id, parmval.parm_id) as parm_id, 'A' orderstatus, coalesce(rpcpv.parm_val, parmval.parm_val) as parm_val
+	from
+		params rf
+	inner join rest_data rd on
+		rd.rest_id = rf.rest_id
+		and rd.rest_inst_id = rf.rest_inst_id
+		and rd.dltd_fl = 0
+		and rd.asn_set_typ = 6031
+	left outer join rest_set_custom_parm_val parmval on
+		parmval.dltd_fl = 0
+		and parmval.mkt_id = :mkt_id
+		and parmval.set_id = rd.pren_set_id
+		and :effectiveDate between parmval.strt_dt and parmval.end_dt
+		and parmval.parm_id = rf.param_id
+	left outer join rest_prof_custom_parm_val rpcpv on
+		rpcpv.rest_id = rd.rest_id
+		and rpcpv.REST_INST_ID = rd.REST_INST_ID
+		and rpcpv.parm_id = rf.param_id
+		and rpcpv.mkt_id = :mkt_id
+		and rpcpv.dltd_fl = 0
+	where
+		parmval.parm_val is not null
+		or rpcpv.parm_val is not null ) PPSD on
+	MSAPC.ADPTR_PARM_ID = PPSD.PARM_ID
+where
+	SAPD.ADPTR_PARM_ID = MSAPC.ADPTR_PARM_ID
+	and SAPD.PARM_ID = P.PARM_ID
+	and MSAPC.DLTD_FL = 0
+	and MSAPC.STUS = 1
+	and P.STUS = 1
+	and P.DLTD_FL = 0
+	and P.parm_id not in (select
+	rpsx.parm_id
+from
+	rest_prof_custom_parm_stus rpsx
+where
+	rpsx.rest_id = :rest_id
+	and rpsx.rest_inst_id = :rest_inst_id
+	and rpsx.dltd_fl = 0
+	and rpsx.mkt_id = :mkt_id
+	and rpsx.stus = 0
+	and exists (
+	select
+		1
+	from
+		mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f
+	where
+		feat_typ is not null
+		and x.feat_typ = f.param_feat_id
+		and x.cnfg_parm_id = rpsx.parm_id
+		and f.rest_id = :rest_id
+		and f.rest_inst_id = :rest_inst_id
+		and f.dltd_fl = 0
+		and x.dltd_fl = 0
+union
+	select
+		1
+	from
+		mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f
+	where
+		feat_typ is not null
+		and x.feat_typ = f.param_feat_id
+		and x.adptr_parm_id = rpsx.parm_id
+		and f.rest_id = :rest_id
+		and f.rest_inst_id = :rest_inst_id
+		and f.dltd_fl = 0
+		and x.dltd_fl = 0 )
+union
+select
+	rs.parm_id
+from
+	rest_set_custom_parm_stus rs,
+	rest_data rd
+where
+	rd.rest_id = :rest_id
+	and rd.rest_inst_id = :rest_inst_id
+	and rd.dltd_fl = 0
+	and rd.asn_set_typ = 6031
+	and rs.set_id = rd.pren_set_id
+	and :effectiveDate between rs.strt_dt and rs.end_dt
+	and rd.dltd_fl = 0
+	and rs.stus = 0
+	and rs.mkt_id = :mkt_id
+	and rs.dltd_fl = 0
+	and exists (
+	select
+		1
+	from
+		mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f
+	where
+		feat_typ is not null
+		and x.feat_typ = f.param_feat_id
+		and x.cnfg_parm_id = rs.parm_id
+		and f.rest_id = :rest_id
+		and f.rest_inst_id = :rest_inst_id
+		and f.dltd_fl = 0
+		and x.dltd_fl = 0
+		and x.mkt_id = rs.mkt_id
+union
+	select
+		1
+	from
+		mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f
+	where
+		feat_typ is not null
+		and x.feat_typ = f.param_feat_id
+		and x.adptr_parm_id = rs.parm_id
+		and f.rest_id = :rest_id
+		and f.rest_inst_id = :rest_inst_id
+		and f.dltd_fl = 0
+		and x.dltd_fl = 0
+		and x.mkt_id = rs.mkt_id )
+	and not exists (
+	select
+		1
+	from
+		rest_prof_custom_parm_stus rpsx
+	where
+		rpsx.rest_id = :rest_id
+		and rpsx.rest_inst_id = :rest_inst_id
+		and rpsx.dltd_fl = 0
+		and rpsx.mkt_id = :mkt_id
+		and rpsx.stus <> 0
+		and rpsx.parm_id = rs.parm_id
+		and exists (
+		select
+			1
+		from
+			mkt_strdb_cnfg_parm_cntl x, REST_PARAM_FEAT f
+		where
+			feat_typ is not null
+			and x.feat_typ = f.param_feat_id
+			and x.cnfg_parm_id = rpsx.parm_id
+			and f.rest_id = :rest_id
+			and f.rest_inst_id = :rest_inst_id
+			and f.dltd_fl = 0
+			and x.dltd_fl = 0
+			and x.mkt_id = rpsx.mkt_id
+	union
+		select
+			1
+		from
+			mkt_strdb_adptr_parm_cntl x, REST_PARAM_FEAT f
+		where
+			feat_typ is not null
+			and x.feat_typ = f.param_feat_id
+			and x.adptr_parm_id = rpsx.parm_id
+			and f.rest_id = :rest_id
+			and f.rest_inst_id = :rest_inst_id
+			and f.dltd_fl = 0
+			and x.dltd_fl = 0
+			and x.mkt_id = rpsx.mkt_id ) ))]]>
+    </getParamsDataList>
+   
+   <getStorePromotionDiscounts>
+        <![CDATA[  select
+	coalesce(c.ORDR_DISC_NA, p.ORDR_DISC_NA) as name,
+	coalesce(c.PRIORITY, p.PRIORITY) as sequence,
+	case coalesce(c.STUS, p.STUS) 
+	when 1 then 'enabled'
+	else 'disabled'
+end as status,
+     coalesce(c.STRT_DT, p.STRT_DT) as initialDate,
+     coalesce(c.END_DT, p.END_DT) as finalDate,
+     coalesce(c.INIT_ORD_VAL, p.INIT_ORD_VAL) as initialOrderTotalValue,
+     coalesce(c.FN_ORD_VAL, p.FN_ORD_VAL) as finalOrderTotalValue,
+     case cast(coalesce(c.DISC_TYP, p.DISC_TYP) as numeric)
+when 1 then 'A'
+when 2 then 'P'
+end as discountType,
+     coalesce(c.AMT_PRCNT, p.AMT_PRCNT) as discountValue
+from
+    (
+select
+			set_ID,
+      ORDR_DISC_NA,
+      PRIORITY,
+      STUS,
+      STRT_DT,
+      END_DT,
+      INIT_ORD_VAL,
+      FN_ORD_VAL,
+      DISC_TYP,
+      AMT_PRCNT,
+	  DATA_ID
+from
+REST_ORDR_DISC ordr
+where
+ordr.set_id = :parentSetId
+and (:effectiveDate between ordr.strt_dt and ordr.end_dt
+	or :effectiveDate >= ordr.strt_dt
+		and ordr.end_dt is null )
+and :effectiveDate between ordr.eff_strt_dt and ordr.eff_end_dt
+and ordr.dltd_fl = 0
+    )p
+full outer join
+    (
+select
+SET_ID,
+      ORDR_DISC_NA,
+      PRIORITY,
+      STUS,
+      STRT_DT,
+      END_DT,
+      INIT_ORD_VAL,
+      FN_ORD_VAL,
+DISC_TYP,
+      AMT_PRCNT,
+	  DATA_ID
+from
+REST_ORDR_DISC ordr
+where
+ordr.set_id = :customSetId
+and ( :effectiveDate between ordr.strt_dt and ordr.end_dt
+	or :effectiveDate >= ordr.strt_dt
+		and ordr.end_dt is null )
+and :effectiveDate between ordr.eff_strt_dt and ordr.eff_end_dt
+	and ordr.dltd_fl = 0
+    )c
+  on
+p.data_id = c.data_id ]]>
+</getStorePromotionDiscounts>
+
+</queries>
+

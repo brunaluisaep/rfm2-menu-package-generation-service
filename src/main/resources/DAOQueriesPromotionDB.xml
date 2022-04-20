@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+
+	<getNodeType>
+		<![CDATA[Select distinct coalesce (typ,'NR') nodeType from node where node_id = :nodeId and mkt_id = :marketId and dltd_fl = 0]]>
+	</getNodeType>
+	
+	<getPrioritizedNodeCountM>
+		<![CDATA[
+	select count(*) from promo_priority where
+	        NODE_ID = (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParent where inhr_ord = :var_max_inh_ord AND node_typ<>'S')
+	]]>
+	</getPrioritizedNodeCountM>
+	
+	<getSugstvPromos>
+		<![CDATA[select sq.promo_id,sq.sugstv_id,sq.sugstv_typ from promo_sugstv sq where sq.mkt_id =:mkt_id and sq.dltd_fl =0
+	]]>
+	</getSugstvPromos>
+	
+	<getPromoGtt>
+		<![CDATA[SELECT
+	PROMO_ID,PROMO_INST_ID ,CRTR_NODE_ID,TEMPLT_ID,TEMPLT_TYP,NAME,LONG_DESC,CODE ,IMG_PATH,STUS  ,
+	QTY_LIMIT,BARCODE,STRT_DT,END_DT,ENGINE_XML,RFM_LANG_XML,REF_PROMO_ID,PRIORITY,CRTE_TS,CRTE_USER_ID ,
+	UPDT_TS,UPDT_USER_ID  ,DEL_TS,DEL_USER_ID   ,DLTD_FL,MKT_ID,PROMO_TYP,CUST_NODE_ID  ,HLDY_DATE,VLD_DAYS_FL   ,
+	INHR_ORD      ,CUST_FL,CRTR_NODE_NAME,RMDE  ,SHOW_INDIV_PRC,
+CNT_PROMO_LIMIT
+FROM(
+    WITH parent AS(
+	SELECT
+		p.promo_id, p.promo_inst_id,p.TEMPLT_ID  ,	 p.TEMPLT_TYP  ,p.CODE,p.IMG_PATH,p.QTY_LIMIT,p.BARCODE,
+		p.STRT_DT,p.END_DT  ,P.RFM_LANG_XML, p.REF_PROMO_ID ,P.PRIORITY   ,	 p.CRTE_TS,p.CRTE_USER_ID,P.UPDT_TS ,
+		p.UPDT_USER_ID ,	   p.DEL_TS ,p.DEL_USER_ID ,p.DLTD_FL ,p.MKT_ID  , p.PROMO_TYP,  	   p.VLD_DAYS_FL,	 
+		n.SHRT_NA AS CRTR_NODE_NAME,p.RMDE, p.crtr_node_id ,	   p.cust_node_id,		 nh.inhr_ord   ,pn.name,
+		pn.long_desc  ,		p.cust_fl  ,	   p.hldy_date  ,		 p.engine_xml  ,		p.stus,
+		p.SHOW_INDIV_PRC,	p.CNT_PROMO_LIMIT 
+	FROM  promo p
+	LEFT OUTER JOIN
+		promo_na pn
+	ON  pn.promo_id  = p.promo_id
+		AND     pn.promo_inst_id = p.promo_inst_id
+		AND     pn.lcle_id= :lcleId
+		AND     pn.mkt_id= :marketId
+		AND     pn.dltd_fl= 0
+	LEFT OUTER JOIN  
+		PROMO_SUGSTV psu
+	ON  p.promo_inst_id = psu.promo_inst_id
+		AND     p.promo_id      = psu.sugstv_id,
+		node n, node_hrcy nh
+	WHERE
+		p.cust_fl      <> 1
+        AND     p.crtr_node_id  = p.cust_node_id
+		AND     p.dltd_fl= 0
+		AND     n.node_id= p.crtr_node_id
+		AND     nh.chld_node_id = n.node_id and 
+		case 
+				when :exportOnlyActivePromotions = 'true'
+				  then   :effectiveDate between p.strt_dt and p.end_dt and p.stus =1
+				else 
+				     p.end_dt >=:effectiveDate
+				end 
+		AND     nh.chld_node_id = nh.node_id
+		AND     p.crtr_node_id IN (
+			WITH RECURSIVE temp1 AS(
+				SELECT
+					  NODE_ID,CHLD_NODE_ID FROM(
+                      SELECT  NODE.NODE_ID,NODE.CHLD_NODE_ID FROM NODE_HRCY NODE
+							WHERE
+								NODE.CHLD_NODE_ID<>NODE.NODE_ID
+								AND     NODE.DLTD_FL      =0
+								AND     MKT_ID    =:marketId
+								AND     NODE.CHLD_NODE_ID =:nodeId)A
+					  UNION ALL
+					  SELECT
+                            D.NODE_ID,D.CHLD_NODE_ID FROM(
+                            SELECT NODE1.NODE_ID,NODE1.CHLD_NODE_ID FROM NODE_HRCY NODE1
+                            WHERE
+								NODE1.CHLD_NODE_ID<>NODE1.NODE_ID
+								AND     NODE1.DLTD_FL      =0
+								AND     NODE1.MKT_ID=:marketId)D
+					JOIN temp1
+					ON  temp1.NODE_ID=D.CHLD_NODE_ID)
+				SELECT  temp1.NODE_ID FROM temp1 )
+    ),
+	custom AS(
+        SELECT
+			p.promo_id,p.promo_inst_id,p.TEMPLT_ID  ,p.TEMPLT_TYP  ,p.CODE ,p.IMG_PATH,p.QTY_LIMIT,p.BARCODE,p.STRT_DT,p.END_DT,p.RFM_LANG_XML,     
+			p.REF_PROMO_ID ,P.PRIORITY   ,	p.CRTE_TS,p.CRTE_USER_ID,p.UPDT_TS,p.UPDT_USER_ID ,p.DEL_TS,p.DEL_USER_ID ,p.DLTD_FL,
+			p.MKT_ID,p.PROMO_TYP, p.VLD_DAYS_FL,n.SHRT_NA AS CRTR_NODE_NAME,p.RMDE,p.crtr_node_id ,p.cust_node_id,nh.inhr_ord,
+			pn.name,pn.long_desc ,p.cust_fl      ,	   p.hldy_date  ,		 p.engine_xml  ,		p.stus        ,
+			p.SHOW_INDIV_PRC,	p.CNT_PROMO_LIMIT 
+		FROM promo p
+        LEFT OUTER JOIN
+                promo_na pn
+        ON
+			pn.promo_id      = p.promo_id
+			AND     pn.promo_inst_id = p.promo_inst_id
+			AND     pn.lcle_id       = :lcleId
+			AND     pn.mkt_id        = :marketId
+			AND     pn.dltd_fl       = 0
+        LEFT OUTER JOIN
+                PROMO_SUGSTV psu
+        ON
+                p.promo_inst_id = psu.promo_inst_id
+        AND     p.promo_id      = psu.sugstv_id,
+                node n                         ,
+                node_hrcy nh
+        WHERE
+                p.cust_fl       = 1
+				AND     p.crtr_node_id <> p.cust_node_id
+				AND     n.node_id       = nh.chld_node_id
+				AND     n.dltd_fl       = 0
+				AND     p.dltd_fl       = 0
+				AND     nh.dltd_fl      = 0
+				AND     nh.node_id      = nh.chld_node_id and
+				case 
+				when :exportOnlyActivePromotions = 'true'
+				  then  :effectiveDate between p.strt_dt and p.end_dt 
+				and 	p.stus =1
+				else 
+				     p.end_dt >= :effectiveDate
+				end 
+				AND     n.node_id       = p.cust_node_id
+				AND     p.cust_node_id IN
+				(WITH	RECURSIVE temp1 AS
+					(
+						SELECT  NODE_ID,CHLD_NODE_ID
+						FROM(
+							SELECT NODE.NODE_ID,NODE.CHLD_NODE_ID
+							FROM
+								NODE_HRCY NODE
+							WHERE
+								NODE.CHLD_NODE_ID<>NODE.NODE_ID
+								AND     NODE.DLTD_FL      =0
+								AND     MKT_ID            =:marketId
+								AND     NODE.CHLD_NODE_ID =:nodeId)A
+						UNION ALL
+						SELECT  D.NODE_ID,D.CHLD_NODE_ID 
+						FROM (
+							SELECT NODE1.NODE_ID,NODE1.CHLD_NODE_ID
+							FROM
+								NODE_HRCY NODE1
+							WHERE
+								NODE1.CHLD_NODE_ID<>NODE1.NODE_ID
+								AND     NODE1.DLTD_FL      =0
+								AND     NODE1.MKT_ID       =:marketId)D
+							JOIN
+                                temp1
+							ON
+								temp1.NODE_ID=D.CHLD_NODE_ID)
+						SELECT temp1.CHLD_NODE_ID  FROM temp1 )
+	)
+    SELECT
+		PROMO_ID,PROMO_INST_ID,CRTR_NODE_ID,TEMPLT_ID,TEMPLT_TYP,NAME,LONG_DESC,CODE,IMG_PATH,STUS,QTY_LIMIT,BARCODE,
+		STRT_DT,END_DT,ENGINE_XML,RFM_LANG_XML,REF_PROMO_ID,PRIORITY,CRTE_TS,CRTE_USER_ID,UPDT_TS,UPDT_USER_ID,DEL_TS,
+		DEL_USER_ID,DLTD_FL,MKT_ID,PROMO_TYP,CUST_NODE_ID,HLDY_DATE,VLD_DAYS_FL,INHR_ORD,CUST_FL,CRTR_NODE_NAME,RMDE,
+		SHOW_INDIV_PRC ,CNT_PROMO_LIMIT,
+		rank() over (PARTITION BY code ORDER BY inhr_ord DESC) AS rnk
+    FROM(SELECT * FROM(SELECT * FROM parent)prnt
+				UNION ALL(SELECT * FROM custom))prData)promotionData
+WHERE
+        rnk=1
+		]]>
+	</getPromoGtt>
+	<getPromoGttRest><![CDATA[
+select
+      P.PROMO_ID,
+      P.PROMO_INST_ID,
+      P.CRTR_NODE_ID,
+      P.TEMPLT_ID,
+      P.TEMPLT_TYP,
+      P.NAME,
+      P.CODE,
+      P.IMG_PATH,
+      P.STUS,
+      P.QTY_LIMIT,
+      P.BARCODE,
+      P.STRT_DT,
+      P.END_DT,
+	   case P.promo_exclsv when 0 then Replace(P.ENGINE_XML,'exclusive="false"','exclusive="true"') else P.ENGINE_XML end,
+      P.RFM_LANG_XML,
+      P.REF_PROMO_ID,
+      P.PRIORITY,
+      P.CRTE_TS,
+      P.CRTE_USER_ID,
+      P.UPDT_TS,
+      P.UPDT_USER_ID,
+      P.DEL_TS,
+      P.DEL_USER_ID,
+      P.DLTD_FL,
+      P.MKT_ID,
+      P.PROMO_TYP,
+      P.CUST_NODE_ID,
+      P.HLDY_DATE,
+      P.VLD_DAYS_FL,
+      4 as INH_ORD,
+      P.CUST_FL ,
+      CRTR_NODE_NA
+	from promo p
+	where p.crtr_node_id = :n_node_id
+	and p.dltd_fl=0 and 
+	case when :exportOnlyActivePromotions = 'true'
+		then  :effectiveDate between p.strt_dt and p.end_dt and p.stus =1
+		else   p.end_dt >=:effectiveDate
+		end 
+	]]></getPromoGttRest>
+	
+	<getCustInhrOdr>
+		<![CDATA[
+		select INHR_ORD 
+		from NODE_HRCY
+		where CHLD_NODE_ID = :n_node_id
+		and NODE_ID = :n_node_id;
+		]]>
+	</getCustInhrOdr>
+	
+
+	<getGttPromoParentNodesS>
+		<![CDATA[SELECT :n_node_id as node_id,(select inhr_ord from NODE_HRCY where node_id = :n_node_id and mkt_id = :n_mkt_id and dltd_fl=0 limit 1),'S' as node_typ
+		]]>
+	</getGttPromoParentNodesS>
+	
+	<getPrioritizedNodeCount>
+		<![CDATA[select count(*) from promo_priority where NODE_ID = :n_node_id and mkt_id=:marketId]]>
+	</getPrioritizedNodeCount>
+	
+	<getMaxInhOrd>
+		<![CDATA[select max(inhr_ord) from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where node_typ <> 'S']]>
+	</getMaxInhOrd>
+	
+	<getGttPromoPriorityN>
+	<![CDATA[
+			select NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl from promo_priority where NODE_ID = :n_node_id and dltd_fl = 0
+			UNION
+			select CUST_NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl from promo where CRTR_NODE_ID IN
+			(SELECT node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where node_id != :n_node_id) and dltd_fl = 0 and
+			promo_id not in (select PROMO_ID from promo_priority where NODE_ID = :n_node_id) and PROMO_TYP=0
+		]]>
+	</getGttPromoPriorityN>	
+	
+	<getGttPromoParentNodesHq>
+		<![CDATA[select nh.node_id,inhr_ord,COALESCE(typ,'NR') as node_typ from NODE_HRCY nh,node n where nh.node_id in (
+WITH RECURSIVE CTE_CONNECT_BY AS (
+SELECT 1 AS LEVEL, S.* FROM (SELECT node_hr.node_id,
+             node_hr.chld_node_id
+            FROM NODE_HRCY node_hr
+            WHERE node_hr.chld_node_id <> node_hr.node_id
+             AND node_hr.dltd_fl = 0
+             AND MKT_ID = :n_mkt_id) as S WHERE chld_node_id  = :n_node_id
+UNION ALL
+SELECT LEVEL + 1 AS LEVEL, S.* FROM CTE_CONNECT_BY R INNER JOIN (SELECT node_hr.node_id,
+             node_hr.chld_node_id
+            FROM NODE_HRCY node_hr
+            WHERE node_hr.chld_node_id <> node_hr.node_id
+             AND node_hr.dltd_fl = 0
+             AND MKT_ID = :n_mkt_id) as S ON  r.node_id = s.chld_node_id
+)
+      SELECT distinct node_id
+       FROM
+          cte_connect_by
+) and  nh.node_id = nh.chld_node_id
+      and nh.node_id = n.node_id
+      and (typ != 'S' or typ is null)
+      union
+      select nh.node_id,nh.inhr_ord,'S'
+      from node_hrcy nh,node n
+      where chld_node_id in (:n_node_id) and  typ ='S' and nh.node_id =n.node_id and nh.mkt_id = n.mkt_id
+      ]]>
+	</getGttPromoParentNodesHq>
+	
+	<getGttPromoPriorityUnionWise>
+	<![CDATA[
+			select NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl from promo_priority
+			        where NODE_ID = (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where inhr_ord = :var_max_inh_ord AND node_typ<>'S')
+			        and dltd_fl = 0
+		        
+		        UNION
+		        
+			        select CRTR_NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl from PROMO
+			        where CUST_NODE_ID IN (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where inhr_ord != :var_max_inh_ord AND node_typ<>'S')
+		          	and dltd_fl = 0
+		            and promo_id not in (
+		            	select PROMO_ID from promo_priority
+		            	where NODE_ID = (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where inhr_ord = :var_max_inh_ord AND node_typ<>'S')
+		            ) 
+		            and PROMO_TYP=0
+		            
+		        UNION
+		        
+			        select NODE_ID,PROMO_ID,PRIORITY, :n_mkt_id as mkt_id,0 as dltd_fl from promo_priority
+			        where NODE_ID in (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where node_typ = 'S')
+			        and dltd_fl = 0
+		        
+		        UNION
+		        
+			        select CRTR_NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl
+			        from PROMO
+			        where CUST_NODE_ID IN (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where node_typ = 'S')
+			        and dltd_fl = 0 
+			        and promo_id not in (
+			        	select PROMO_ID from promo_priority
+                      	where NODE_ID in (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes where node_typ = 'S')
+                    ) 
+                    and PROMO_TYP=0
+		                                            
+		        UNION
+		        
+		        	select CUST_NODE_ID,PROMO_ID,PRIORITY,:n_mkt_id as mkt_id,0 as dltd_fl from PROMO where CRTR_NODE_ID = :n_node_id
+		        	and dltd_fl = 0 and PROMO_TYP=0
+		]]>
+	</getGttPromoPriorityUnionWise>	
+	
+	<getGttPriorityOdcb>	
+	<![CDATA[
+	 select promo_id PROMO_ID, prom.PRIORITY, CODE CODE, prom.NAME, TEMPLT_TYP TEMPLT_TYP, SHRT_NA SHRT_NA, 
+          STRT_DT STRT_DT, END_DT END_DT, STUS STUS, mkt_id MKT_ID, promo_inst_id PROMO_INST_ID, TEMPLT_ID TEMPLT_ID from (
+          
+        	select P.promo_id, P.priority, P.CODE, PROMO_NAME.NAME, P.TEMPLT_TYP, SHRT_NA, 
+        		STRT_DT, END_DT, P.STUS, P.mkt_id, p.promo_inst_id, p.TEMPLT_ID, rank() over (partition by p.promo_id order by p.priority asc) as rnk
+        	from
+          	(
+          		(select PPT.promo_id,PPT.priority,P.CODE,P.NAME,P.TEMPLT_TYP,N.SHRT_NA,
+            	P.STRT_DT as STRT_DT,P.END_DT as END_DT,P.STUS,P.mkt_id,
+            	p.promo_inst_id, TEMPLT_ID
+            	from (:GTT_PROMO_PRIORITY) PPT, (:promo_gtt) P,NODE N
+            	where PPT.promo_id = P.promo_id and P.PRIORITY IS NOT NULL
+            	and N.node_id = P.CUST_NODE_ID and P.mkt_id = :n_mkt_id and P.dltd_fl = 0
+            	and PROMO_TYP=0
+            	and P.END_DT >= :effectiveDate 
+            	and ( p.CRTR_NODE_ID IN (:GTT_PROMO_PARENT_NODES)
+                	or p.CRTR_NODE_ID = :n_node_id
+            	)
+            	order by PPT.priority ASC) p
+          		left outer join
+          		(
+          			select pn.promo_id, pn.name, pn.promo_inst_id
+            		from promo_na pn
+            		where pn.lcle_id=:n_lcle_id
+            		and pn.mkt_id=:n_mkt_id
+            		and pn.dltd_fl=0
+          		) PROMO_NAME
+          		on(PROMO_NAME.promo_id=p.promo_id and PROMO_NAME.promo_inst_id=p.promo_inst_id)
+          	)
+          order by P.priority ASC) prom where rnk = 1
+        ]]>
+	</getGttPriorityOdcb>	
+	
+	<getGttPriorityIb>	
+	<![CDATA[
+	select PPT.promo_id,PPT.priority,
+        row_Number() over (order by ppt.priority asc) pkgPriority,p.promo_typ
+        from (:GTT_PROMO_PRIORITY) PPT, PROMO P,NODE N
+        where PPT.promo_id = P.promo_id and P.PRIORITY IS NOT NULL
+        and N.node_id = P.CUST_NODE_ID and P.mkt_id = :n_mkt_id and P.dltd_fl = 0
+        and P.END_DT >= :effectiveDate
+        order by PPT.priority ASC
+        ]]>
+	</getGttPriorityIb>	
+	
+	<getGttPriorityOdca>
+		<![CDATA[
+	select P.promo_id, P.priority, P.CODE, PROMO_NAME.NAME, P.TEMPLT_TYP, SHRT_NA, 
+          			STRT_DT, END_DT, P.STUS, P.mkt_id, p.promo_inst_id, P.TEMPLT_ID
+          from
+            ((select P.promo_id,P.priority,P.CODE,P.NAME,P.TEMPLT_TYP,N.SHRT_NA,
+              P.STRT_DT as STRT_DT, P.END_DT as END_DT,P.STUS,P.mkt_id,
+              p.promo_inst_id, TEMPLT_ID
+              from (:promo_gtt) P,NODE N
+              where
+              N.node_id = P.CUST_NODE_ID and P.mkt_id = :n_mkt_id and P.dltd_fl = 0 and P.PRIORITY IS NOT NULL
+              and (p.CRTR_NODE_ID = :n_node_id OR p.CRTR_NODE_ID IN (:GTT_PROMO_PARENT_NODES))
+              and PROMO_TYP=0
+              and P.END_DT >= :effectiveDate
+              order by P.priority ASC) p
+              left outer join
+              (select pn.promo_id, pn.name, pn.promo_inst_id
+                from promo_na pn
+                where pn.lcle_id=:n_lcle_id
+                and pn.mkt_id=:n_mkt_id
+                and pn.dltd_fl=0
+              ) PROMO_NAME
+            on(PROMO_NAME.promo_id=p.promo_id and PROMO_NAME.promo_inst_id=p.promo_inst_id))
+            order by P.priority ASC
+	]]></getGttPriorityOdca>
+	
+	<getGttPriorityIa>
+		<![CDATA[
+			select P.promo_id,P.priority,
+               row_number() over (order by p.priority asc) pkgPriority,p.promo_typ
+        from PROMO P,NODE N
+        where N.node_id = P.CUST_NODE_ID and P.mkt_id = :n_mkt_id and P.dltd_fl = 0 and P.PRIORITY IS NOT NULL
+        and (p.CRTR_NODE_ID = :n_node_id OR p.CRTR_NODE_ID IN (select node_id from (:GTT_PROMO_PARENT_NODES) as gttPromoParentNodes))
+        and PROMO_TYP=0
+        and P.END_DT >= :effectiveDate
+        order by P.priority ASC;
+	]]></getGttPriorityIa>
+	
+
+</queries>

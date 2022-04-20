@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "package-generation-service.name" . }}
+  labels:
+    {{- include "package-generation-service.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.packageGenerationService.service.type }}
+  selector:
+    {{- include "package-generation-service.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.packageGenerationService.service.port }}
+      targetPort: {{ .Values.packageGenerationService.service.port }}
+      protocol: TCP
+      name: http

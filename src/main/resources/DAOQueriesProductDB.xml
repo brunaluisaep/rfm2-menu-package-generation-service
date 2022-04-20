@@ -1,0 +1,1150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+	<getLocalizationSets>
+        <![CDATA[  SELECT pren_set_id, cusm_set_id
+                    FROM REST_DATA rd inner join REST r on
+                    rd.REST_INST_ID = r.REST_INST_ID and rd.REST_ID = r.REST_ID and r.NODE_ID=:nodeId
+                    inner join tbl_setvo s on r.rest_id=s.data_id and r.rest_inst_id=s.data_inst_id 
+                    WHERE rd.asn_set_typ = 6015 AND rd.dltd_fl = 0 and :effectiveDate between s.strt_dt and s.end_dt and s.data_typ=6008
+        ]]>
+	</getLocalizationSets>
+
+	<getProductDataForDimensionGroup>
+		<![CDATA[SELECT prd_id,
+      cd,
+      prd_cd,
+      dimn_id,
+      COALESCE(COALESCE(r.size_ord,s.size_ord),m.size_ord) AS size_order,
+      (SELECT CASE WHEN SHOW_DIM_TO_CUST = '1' THEN 'true' WHEN SHOW_DIM_TO_CUST = '0' THEN 'false' ELSE NULL END) as SHOW_DIM_TO_CUST,
+      (SELECT CASE WHEN shw_on_rct_lcl_promo = '1' THEN 'true' WHEN shw_on_rct_lcl_promo = '0' THEN 'false' ELSE NULL END) as shw_on_rct_lcl_promo
+    FROM
+      (SELECT pinfo.prd_id,
+        NA.cd,
+        pinfo.prd_cd,
+        pinfo.dimn_id,
+        pinfo.dimn_na_id,
+        na.size_ord,
+        pinfo.show_dim_to_cust,
+        pinfo.shw_on_rct_lcl_promo
+        FROM dimn_grp d 
+		    JOIN DIMN_GRP_PRD pinfo ON pinfo.dimn_id = d.dimn_id AND pinfo.start_dt = d.start_dt  AND pinfo.dltd_fl = 0
+		    and pinfo.dimn_id in (SELECT dp.dimn_id
+		    FROM DIMN_GRP_PRD dp
+		   WHERE dp.dltd_fl = 0
+		     AND EXISTS (SELECT 1 
+		                   FROM dimn_grp d 
+		                   WHERE dp.start_dt = d.start_dt
+                           AND dp.dimn_id = d.dimn_id
+		                   AND d.stus=1
+                           AND :p_eff_dt  BETWEEN d.start_dt AND d.end_dt 
+                           AND d.dltd_fl = 0))
+		    
+		    JOIN DIMN_NA NA on na.dimn_na_id= pinfo.dimn_na_id AND NA.dltd_fl = 0 
+		WHERE :p_eff_dt BETWEEN d.start_dt AND d.end_dt
+		  AND d.dltd_fl = 0
+		  and d.stus = 1
+      ) M
+    LEFT OUTER JOIN
+      (SELECT a.data_id,
+        a.size_ord
+      FROM REST_DIMN A
+      WHERE A.SET_ID = :parentSetId
+      AND A.dltd_fl=0
+      ) S
+    ON M.dimn_na_id = S.DATA_ID
+    LEFT OUTER JOIN
+      (SELECT a.data_id,
+        a.size_ord
+      FROM REST_DIMN A
+        WHERE A.SET_ID = :custSetId
+      AND A.dltd_fl=0
+      )R
+    ON M.dimn_na_id = R.DATA_ID
+    ORDER BY dimn_id,
+      size_order nulls last,
+      CD]]>
+	</getProductDataForDimensionGroup>
+	<getMarketCustomParameters>
+		<![CDATA[
+	SELECT 
+    PCPD.PARM_ID,
+    P.XML_NEWPOS_TAG AS pname,
+    ( CASE
+           WHEN P.DATA_TYP = '3' THEN
+           (SELECT MV.pkg_gen_cd
+            FROM   mw_pkggen_lkup_cd MV
+            WHERE  MV.lex_id = p.lex_id
+                   AND MV.entr_cd = MSCPC.def_val)
+           ELSE COALESCE(MSCPC.def_val, P.def_val)
+         END ) pvalue,
+    PCPD.PRD_CLS_ID,
+    --P.MAND,
+    P.DATA_TYP,
+    P.LEX_ID
+  FROM MKT_SMI_CUSM_PARM_CNTL MSCPC
+  INNER JOIN PRD_CUSM_PARM_DEFN PCPD
+  ON MSCPC.PRD_CUSM_PARM_ID = PCPD.PRD_CUSM_PARM_ID
+  AND MSCPC.MKT_ID          = :mktId
+  AND MSCPC.STUS            = 1
+  AND MSCPC.DLTD_FL         = 0
+  AND PCPD.DLTD_FL          = 0
+  INNER JOIN PARM P
+  ON PCPD.PARM_ID = P.PARM_ID
+  AND P.STUS      = 1
+  AND P.DLTD_FL   = 0 and COALESCE(MSCPC.def_val, P.def_val) is not null
+]]>
+	</getMarketCustomParameters>
+
+	<getCategoriesVals>
+        <![CDATA[   SELECT
+cas.prd_id,
+cat.cat_cd,
+cas.prd_seq,
+case cas.size_fl  when 0 then  'false'  else 'true' end AS sizeflag
+FROM
+cat_assc_prd cas
+INNER JOIN prd_cat cat ON cas.cat_id = cat.cat_id
+AND cat.dltd_fl = 0
+AND :effectiveDate BETWEEN cat.strt_dt AND cat.end_dt
+WHERE
+cas.dltd_fl = 0
+AND :effectiveDate BETWEEN cas.strt_dt AND cas.end_dt
+order by cas.prd_seq]]>
+	</getCategoriesVals>
+
+<getGroupCount>
+        <![CDATA[   SELECT COUNT(1) as GPCOUNT
+    FROM MI_GRP MG, MI_GRP_DTL MGT
+    WHERE MG.MI_GRP_ID 	= MGT.MI_GRP_ID
+    AND MG.MKT_ID 		= MGT.MKT_ID
+    AND MG.MKT_ID		  = :mktId
+    AND MG.DLTD_FL 		= 0 AND MGT.DLTD_FL = 0]]>
+</getGroupCount>
+
+	<getMenuItemGroupValues>
+        <![CDATA[   SELECT *
+            FROM MI_GRP_DTL MGT INNER JOIN MI_TBL_SETVO MTS
+            ON MGT.PRD_ID = MTS.DATA_ID
+            AND MGT.MKT_ID = MTS.MKT_ID
+            AND MTS.DATA_TYP = 3002 AND MTS.DATA_SUBTYP = 101
+            AND :effectiveDate BETWEEN MTS.STRT_DT AND MTS.END_DT
+            LEFT OUTER JOIN MI_GRP MG
+            ON MGT.MI_GRP_ID 	= MG.MI_GRP_ID
+            AND MGT.MKT_ID 		= MG.MKT_ID
+                  WHERE MG.MKT_ID 	= :mktId
+            AND MG.DLTD_FL  	= 0	AND MGT.DLTD_FL = 0
+            AND MG.MI_GRP_TYP 	<> 3]]>
+	</getMenuItemGroupValues>
+	<getProductListDataForPromotionGroup>
+<![CDATA[        
+ SELECT DISTINCT PG.PROMO_GRP_ID, PG.PROMO_GRP_CD, PGD.PRD_ID,
+ COALESCE((select PGD.LST_FLG from PROMO_GRP_TYP_DTL PGT 
+where  PGT.PROMO_GRP_ID 				= PGD.PROMO_GRP_ID
+AND PGT.PROMO_GRP_TYP_ID 	= 3 	AND PGT.DLTD_FL 			    = 0),0) as flag 
+	FROM PROMO_GRP_DTLS PGD 
+	INNER JOIN MI_TBL_SETVO MTS ON PGD.PRD_ID = MTS.DATA_ID
+	AND PGD.MKT_ID = MTS.MKT_ID
+	AND MTS.DATA_TYP = 3002 AND MTS.DATA_SUBTYP = 101
+	AND  :effDate BETWEEN MTS.STRT_DT AND MTS.END_DT
+	LEFT OUTER JOIN PROMO_GRP PG
+	ON PG.PROMO_GRP_ID 	= PGD.PROMO_GRP_ID
+	AND PG.MKT_ID 		= PGD.MKT_ID
+	WHERE PG.MKT_ID 	= :mktId	
+	AND PG.DLTD_FL 		= 0
+	AND PGD.DLTD_FL 	= 0]]>
+	</getProductListDataForPromotionGroup>
+
+
+	<getProductListCount>
+<![CDATA[  SELECT COUNT(1)
+    product_list_cnt_mkt
+    FROM PROMO_GRP PG, PROMO_GRP_DTLS PGT
+    WHERE PG.PROMO_GRP_ID 	= PGT.PROMO_GRP_ID
+    AND PG.MKT_ID 			= PGT.MKT_ID
+    AND PG.MKT_ID 			= :mktId
+    AND PGT.PRD_ID 			= :prdId
+    AND PG.DLTD_FL 			= 0
+    AND PGT.DLTD_FL 		= 0]]>
+	</getProductListCount>
+
+	<getListFlag>
+<![CDATA[ SELECT  PGD.LST_FLG AS lstFlg
+              FROM PROMO_GRP_DTLS PGD, PROMO_GRP_TYP_DTL PGT
+              WHERE PGD.PROMO_GRP_ID 		= PGT.PROMO_GRP_ID
+              AND PGD.PROMO_GRP_ID 		 	= :promoGrpId
+              AND PGT.PROMO_GRP_TYP_ID 	= 3 				--<List> tag will be exported for Group Type = 'Lower Price Combo' only
+              AND PGT.DLTD_FL 			    = 0
+              AND PGD.DLTD_FL 			    = 0
+              AND PGD.MKT_ID 				= :mktId
+              AND PGD.PRD_ID 				= :prdId]]>
+	</getListFlag>
+		<getSubstitutionList>
+        <![CDATA[   
+SELECT A.PRD_ID,
+          A.SUBS_GRP_ID,na.cd as ITM_ID,b.prd_cd as PRD_CODE,sub_grp.NA as SUBS_GRP_NA ,b.prd_id as sub_PRD_ID       
+        FROM subs_stng a,
+          subs_stng b,
+          SUBS_GRP sub_grp,
+          SUBS_NA na
+        WHERE na.subs_na_id     = b.subs_na_id
+        AND a.subs_grp_id       = b.subs_grp_id
+        AND sub_grp.subs_grp_id = a.subs_grp_id
+        AND sub_grp.stus        = 1
+        AND sub_grp.dltd_fl     = 0
+        AND a.prd_id           != b.prd_id
+        AND a.mkt_id            = b.mkt_id
+        AND a.mkt_id            = :mkt_id        
+        AND b.mkt_id            = a.mkt_id
+        AND a.dltd_fl           = 0
+        AND b.dltd_fl           = 0
+        AND na.dltd_fl          = 0 
+          order by a.prd_id, a.subs_grp_id
+        ]]>
+	</getSubstitutionList>	
+
+	 <getMenuItemPOSKVSPresentation>
+        <![CDATA[SELECT p.prd_id, p.prd_inst_id, p.prd_cd,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||p.PRD_TYP||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =2047 AND l.DLTD_FL = 0)) as PRD_TYP,
+               p.prd_inst_id,p.prd_ds,
+                  d.prd_subtyp,
+                  (SELECT CASE WHEN slbl = '1' THEN 'true' WHEN slbl = '2' THEN 'false' ELSE NULL END) as slbl,
+                   (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||upszble||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='UPSIZABLE')) as upszbl,
+                  (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||dy_part_cd||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =2061 AND l.DLTD_FL = 0)) as dy_part_cd, 
+              auto_notf, auto_notf_dspl,
+              auto_grll_cnfg, kvs_colr, dspl_colr, bg_nrml, bg_prsd,
+              fg_nrml, fg_prsd, cptn_ln_1, cptn_ln_2, cptn_ln_3,
+              sound_file, key_scan, key_shft, auto_grll_slip, use_bffr_eng,
+              grlbl, grlbl_prnt, kvs_show_on_main, kvs_show_on_mfy,
+              kvs_show_on_sumr, kvs_dn_dcmp, prod_prd_grp, prod_lvl,
+              pri_prd_id, dept_na, dept_clas, dept_sub_clas,
+              img, sml_img, grl_img, hndhld_img,
+              ksk_img, alt, grl_grp, smrt_rmdr, prty, auto_cmdt,
+              sumr_mnit_img, cso_crcl_img, cso_lrg_img, cso_smll_img,
+              cso_crt_img, cso_grll_img, cso_dimn_img, 
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||dspl_wste||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='DISPLAY_WASTE')) as dspl_wste,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||mutul_xclu||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='MUTUALLY_EXCLUSIVE')) as mutul_xclu,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||prd_unt||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =37470 AND l.DLTD_FL = 0)) as prd_unt,
+               prd_brcd,upszble,
+				eqvlnt_prd_id,
+              eqvlnt_prd_cd, dspl_prd_id, dspl_prd_cd,
+              sls_eatin::varchar, sls_tkut::varchar, sls_oth::varchar,
+              dpst_id, flav_cd, 
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||cup_size_cd||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='CUP_SIZES')) as cup_size_cd, 
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||lid_opt_cd||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='LID_OPTION')) as lid_opt_cd,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||ice_sel_cd||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='ICE_SELECTION')) as ice_sel_cd,
+             (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||ice_prd_defn_cd||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='ICE_PROD_DEF')) as ice_prd_defn_cd,
+               fee_eatin::varchar, fee_tkut::varchar, fee_oth::varchar,
+              p.prd_inst_id pod_inst, 
+              p.prd_inst_id acd_inst, 
+              p.prd_inst_id ssp_inst, 
+              p.prd_inst_id tm_rstr_inst_id,
+              p.prd_inst_id promo_compli_inst, 
+              p.prd_inst_id menutyp_ass_inst_id, 
+              prmo_per_itm_qty,
+              ngabs_cd, drnk_vol_id, cook_tm, dres_prep_tm, AVLB_ELY_DEL,
+             (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =''||avlb_ely_del||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='DELIVER EARLY')) as avlb_ely_del_desc,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||cyt_ignt_typ||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90837 AND l.DLTD_FL = 0)) as cyt_ignt_typ,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||cyt_item||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90836 AND l.DLTD_FL = 0)) as cyt_item,
+              ingr_id, 
+              (SELECT ingr_grp_na FROM INGR_GRP where
+              INGR_GRP_ID = ingr_id and dltd_fl = 0 and 
+              set_id = (select set_id from sets where typ=3023 and mstr=1 and mkt_id =:mktId and dltd_fl=0)) as cytIngredientGroup,
+              cyt_prvw_img,
+              cyt_prvw_bttn_img, trg_display_orb, trg_sub_prd_id,
+              trg_sub_prd_cd, 
+              p.prd_inst_id prd_src_sub_itm_inst, 
+              p.ccm_ff_priority,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd =p.prc_mtd and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='Pricing Method')) as prc_mtd,
+              cod_media_files, trg_display_numbers, grp_bundle,
+              grp_bundle_limit, cso_value_meal_img, 
+              case
+                when dis_grl_info is null then null
+                when dis_grl_info = 0 then ''
+                else (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				              where mplc.entr_cd = ''||dis_grl_info||''
+                      and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='DISPLAY_GRILL_INSTRUCTIONS'))
+                end dis_grl_info,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd = ''||rtm_type||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='RTM_TYPE')) as rtm_type_desc, rtm_type, 
+				rtm_threshold,
+              rtm_autobp_tmt, rtm_img, rtm_priority,  pri_mnu_itm_prd_id, pri_mnu_itm_prd_cd,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||STATION_GROUP||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90172 AND l.DLTD_FL = 0)) as
+              STATION_GROUP, MAX_INGREDIENT, PARENT_PROMO,
+              prmo_menu_itm, aux_menu_itm, bun_nu, bun_bffr_cnfg,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||chce_grp||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =37471 AND l.DLTD_FL = 0)) as chce_grp,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||fmly_grp||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =2007 AND l.DLTD_FL = 0)) as
+              fmly_grp,
+               ( select STRING_AGG(rfmmdia.mdia_file_na ::varchar, '|'  order by rfmmdia.mdia_file_na) from RFM_mdia rfmmdia where rfmmdia.dltd_fl =0 
+              and rfmmdia.mkt_id=:mktId and  rfmmdia.lgl_id 
+              IN( SELECT   g.img_id FROM PRD_IMG g  WHERE g.prd_inst_id =  p.prd_inst_id  AND prd_id = p.prd_id  and g.dltd_fl = 0 order by seq_id)) as cod_imges,
+                (SELECT CASE WHEN scdy_menu_itm = '1' THEN 'true' WHEN scdy_menu_itm = '2' THEN 'false'  ELSE null END) as scdy_menu_itm,
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||prd_cat||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =2069 AND l.DLTD_FL = 0)) as prd_cat, 
+              (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc where mplc.entr_cd = ''||prd_clas||'' and mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =2079 AND l.DLTD_FL = 0)) as prd_clas,
+              d.prd_inst_id PRMO_INST_ID, prmo_chce, prmo_strt_dt, prmo_end_dt, dspl_ord,
+               (select STRING_AGG(mplc.pkg_gen_cd::varchar, ','  order by mplc.pkg_gen_cd) from mw_pkggen_lkup_cd mplc where mplc.entr_cd 
+              IN(SELECT ''||g.pod_id||'' FROM PRD_POD  g WHERE g.prd_inst_id =  p.prd_inst_id AND prd_id = p.prd_id and g.dltd_fl = 0) 
+ 			  and mplc.lex_id =(SELECT lex_id FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90015 AND l.DLTD_FL = 0)) as pod_val,
+              (select STRING_AGG(l.trnsltd_val ::varchar, ',' order by l.trnsltd_val ) from mw_pkggen_lkup_cd mplc 
+              join lclz l on l.lex_id = mplc.entr_val and l.lcle_id = (select lcle_id from mkt_lcl where mkt_id = :mktId and dflt = 1 and dltd_fl = 0)
+              where mplc.entr_val IN(SELECT g.rtng_rte_id FROM PRD_acd  g  WHERE g.prd_inst_id =  p.prd_inst_id AND g.prd_id = p.prd_id and g.dltd_fl = 0) 
+              and mplc.lex_id =(SELECT lex_id FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =37440 AND l.DLTD_FL = 0)) as acd_val,
+			  (select STRING_AGG(mplc.pkg_gen_cd::varchar, ','  order by mplc.pkg_gen_cd) from mw_pkggen_lkup_cd mplc where mplc.entr_val 
+              IN(SELECT g.ssp_id FROM PRD_SSP g  WHERE g.prd_inst_id =  p.prd_inst_id AND prd_id = p.prd_id and g.dltd_fl = 0)
+ 			  and mplc.lex_id =(SELECT lex_id FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90008 
+ 			  AND l.DLTD_FL = 0)) as ssp_val,
+              (SELECT STRING_AGG(tm_rstr_id::varchar, ',' ORDER  BY tm_rstr_id)
+				  FROM PRD_tm_rstr g
+				  WHERE g.prd_inst_id =  p.prd_inst_id AND prd_id = p.prd_id and g.dltd_fl = 0) as  tm_rstr_val,
+              (SELECT STRING_AGG(prd_comp_id::varchar, ',' ORDER  BY prd_comp_id)
+				  FROM PRD_COMPLI g
+				  WHERE g.prd_inst_id =  p.prd_inst_id  AND prd_id = p.prd_id and g.dltd_fl = 0)  as promo_compli_val,
+                (SELECT STRING_AGG(distinct cat_cd::varchar,',')  from 
+			(SELECT PC.CAT_CD  FROM PRD_CAT PC, PRD_TYP_ASCN PTA WHERE PTA.PRD_TYP::varchar = PC.CAT_ID::varchar AND PTA.PRD_ID = p.prd_id
+			AND PTA.PRD_INST_ID = p.prd_inst_id AND PTA.PRD_TYP_VAL = 'Y' AND PC.DLTD_FL = 0 AND PTA.DLTD_FL= 0 ORDER BY PC.CAT_SEQ) menuTypeAssc) as menutyp_ass_val,
+               (SELECT STRING_AGG(prd_src_id::varchar, ',' ORDER  BY prd_src_id)
+				  FROM PRD_SRC_SUB_ITM g
+				  WHERE g.prd_inst_id =  p.prd_inst_id AND prd_id = p.prd_id and g.dltd_fl=0) as prd_src_sub_itm_val,
+				  (SELECT seq from PRD_CCM 
+				 WHERE typ = :type
+				  AND mkt_id = :mktId
+				 AND prd_id = p.prd_id
+				 AND set_id = :setId 
+				 AND DLTD_FL= 0
+				 AND :effectiveDate BETWEEN strt_dt AND end_dt
+				) as autoBundlingPriority,
+ 				(SELECT  STRING_AGG(qtd::varchar || ',' || rate::varchar, ',' ORDER BY qtd,rate)
+      			  FROM
+           			 PRD_CCM_RATE pcr
+     		     WHERE
+           		 pcr.prd_inst_id = p.prd_inst_id
+           		 AND pcr.prd_id = p.prd_id
+   				 ) as reduction,
+			   	d.ROUTE_GRILL_ONLY, 
+				d.DEDICATE_CELL,
+				d.GRILL_CELL_RANGE_START,
+				d.GRILL_CELL_RANGE_END,
+				p.fee_percentage,
+				p.fee_deliveryid,
+				(select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd = ''||p.fee_deliveryid||'' and mplc.lex_id =(SELECT M.LEX_ID FROM MKT_LKUP M JOIN LKUP_TYP T ON T.TYP = 'Delivery ID' WHERE M.TYP_ID = T.TYP_ID AND M.MKT_ID = :mktId)) as feename,
+				p.fee_max_threshold,
+				p.fee_min_threshold ,
+				(SELECT CASE WHEN PRD_TYP_VAL = 'Y' THEN 1 WHEN PRD_TYP_VAL = 'N' THEN 0 ELSE NULL END PRD_TYP_VAL FROM PRD_TYP_ASCN PA WHERE PA.MKT_ID = P.MKT_ID AND PA.DLTD_FL = 0 AND PA.PRD_ID = P.PRD_ID AND PA.PRD_INST_ID = P.PRD_INST_ID AND PA.PRD_TYP = '3') as BREAKFAST,
+                (SELECT CASE WHEN PRD_TYP_VAL = 'Y' THEN 1 WHEN PRD_TYP_VAL = 'N' THEN 0 ELSE NULL END PRD_TYP_VAL FROM PRD_TYP_ASCN PA WHERE PA.MKT_ID = P.MKT_ID AND PA.DLTD_FL = 0 AND PA.PRD_ID = P.PRD_ID AND PA.PRD_INST_ID = P.PRD_INST_ID AND PA.PRD_TYP = '4') as LUNCH,
+                (SELECT CASE WHEN PRD_TYP_VAL = 'Y' THEN 1 WHEN PRD_TYP_VAL = 'N' THEN 0 ELSE NULL END PRD_TYP_VAL FROM PRD_TYP_ASCN PA WHERE PA.MKT_ID = P.MKT_ID AND PA.DLTD_FL = 0 AND PA.PRD_ID = P.PRD_ID AND PA.PRD_INST_ID = P.PRD_INST_ID AND PA.PRD_TYP = '6') as DINNER,
+                (SELECT STRING_AGG(FROM_TM::varchar || '-' || TO_TM::varchar || '-' || PTR.prd_inst_id::varchar, ',' ORDER BY PTR.TM_RSTR_ID) "FROMTOTIME" FROM PRD_TM_RSTR PTR WHERE PTR.MKT_ID = P.MKT_ID AND PTR.DLTD_FL = 0 AND PTR.PRD_ID = P.PRD_ID AND PTR.PRD_INST_ID = P.PRD_INST_ID) as FROMTOTIME,
+                (SELECT CASE WHEN PRD_TYP_VAL = 'Y' THEN 1 WHEN PRD_TYP_VAL = 'N' THEN 0 ELSE NULL END PRD_TYP_VAL FROM PRD_TYP_ASCN PA WHERE PA.MKT_ID = P.MKT_ID AND PA.DLTD_FL = 0 AND PA.PRD_ID = P.PRD_ID AND PA.PRD_INST_ID = P.PRD_INST_ID AND PA.PRD_TYP = (SELECT CAT_ID FROM PRD_CAT WHERE DYPT='Overnight' AND LVL_ID=1 AND MKT_ID=:mktId)::varchar) as OVERNIGHT,
+                prd_clas as prd_clas_id,
+                prd_cat as prd_cat_id,
+                p.reuse_deposit_eatin,
+                p.reuse_deposit_takeout,
+               (select
+	            STRING_AGG( case
+			      when rtng_rte_id = 1
+			      and selected = 0
+			      then
+			      '<DisplayPickList>false</DisplayPickList>' 
+			     when rtng_rte_id = 1
+			      and selected = 1
+			      then
+			       '<DisplayPickList>true</DisplayPickList>' 
+			      when rtng_rte_id = 2
+			      and selected = 0
+			      then
+			       '<DisplayPOS>false</DisplayPOS>' 
+			      when rtng_rte_id = 2
+			      and selected = 1
+			      then
+			          '<DisplayPOS>true</DisplayPOS>' 
+			      when rtng_rte_id = 3
+			      and selected = 0
+			      then
+			       '<DisplayReceipt>false</DisplayReceipt>' 
+			      when rtng_rte_id = 3
+			      and selected = 1
+			      then
+			       '<DisplayReceipt>true</DisplayReceipt>' 
+			      end :: varchar , ',' order by SEQ) as tags
+                  FROM(
+	               select case when pra.DLTD_FL = 0 then 1 else 0 end as selected,
+		                             pra.rtng_rte_id,
+		                             case WHEN rtng_rte_id = 1 THEN 2
+			     					 WHEN rtng_rte_id = 2 THEN 1
+			      					 WHEN rtng_rte_id NOT IN (1,2) THEN rtng_rte_id END SEQ
+									from PRD_ACD pra
+									where pra.PRD_ID = p.prd_id
+									and pra.prd_inst_id = p.prd_inst_id
+									and pra.rtng_rte_id in (1, 2, 3)
+									union 
+									SELECT DISTINCT selected as selected,
+									rt_id as rtng_rte_id,
+									case WHEN rt_id = 1 THEN 2
+			     					 WHEN rt_id = 2 THEN 1
+			      					 WHEN rt_id NOT IN (1,2) THEN rt_id END SEQ
+									from (
+									  SELECT 1 AS rt_id, 0 AS selected 
+			        				 UNION
+			        				SELECT 2 AS rt_id, 0 AS selected 
+			        				UNION
+			       					SELECT 3 AS rt_id, 0 AS selected 
+									) as total_acd
+									where rt_id not in (
+									SELECT 
+			              PRD_ACD.rtng_rte_id AS rtng_rte_id
+			              FROM PRD_ACD			              
+			            WHERE PRD_ACD.PRD_ID = p.prd_id
+			            and PRD_ACD.PRD_INST_ID = p.prd_inst_id
+			            AND prd_acd.dltd_fl =0))as selected) as tagsdata,
+			        (SELECT mw.pkg_gen_cd
+                    FROM mw_pkggen_lkup_cd mw, lclz lz, lex lx
+                    WHERE mw.lex_id = (select MIN(LEX_ID) from LEX where srce_wd = 'DISPLAY_POS_EVENT')
+                    AND lz.lex_id = mw.entr_val
+                    AND mw.lex_id = lx.lex_id
+                    AND lz.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:mktId and dflt=1 and dltd_fl=0)
+                  AND mw.entr_cd = ''||disp_pos_event||'') as disply_pos_evnt,
+                  (SELECT STRING_AGG( mw.pkg_gen_cd::varchar,',' ORDER BY mw.entr_val)
+                    FROM mw_pkggen_lkup_cd mw, lclz lz, lex lx
+                    WHERE mw.lex_id = (select MIN(LEX_ID) from LEX where srce_wd = 'AUTO_CONDIMENT_SALES_TYPE')
+                    AND lz.lex_id = mw.entr_val
+                    AND mw.lex_id = lx.lex_id
+                    AND lz.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:mktId and dflt=1 and dltd_fl=0)
+                    AND mw.entr_val in (
+                          SELECT PRD_ACD_SALE_TYP.acd_sale_typ_id AS acd_sale_typ_id
+                          FROM PRD_ACD_SALE_TYP
+                          WHERE PRD_ACD_SALE_TYP.PRD_ID = p.prd_id
+                          and PRD_ACD_SALE_TYP.prd_inst_id = p.prd_inst_id
+                          and PRD_ACD_SALE_TYP.mkt_id = :mktId
+                          and PRD_ACD_SALE_TYP.dltd_fl = 0
+                          )
+                    ) as sale_typ,
+                    (SELECT mw.pkg_gen_cd
+                    FROM mw_pkggen_lkup_cd mw, lclz lz, lex lx
+                    WHERE mw.lex_id = (select MIN(LEX_ID) from LEX where srce_wd = 'DISPLAY_DTWT_POS_EVENT')
+                    AND lz.lex_id = mw.entr_val
+                    AND mw.lex_id = lx.lex_id
+                    AND lz.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:mktId and dflt=1 and dltd_fl=0)
+                    AND mw.entr_cd = ''||disp_dtwt_pos_event||''
+                    ) as disp_dtwt_pos_event,
+              (select lclz.trnsltd_val
+              from lclz
+              where lclz.lex_id = prod_prd_grp
+                and lclz.lcle_id = (select lcle_id from mkt_lcl ml where ml.mkt_id=:mktId and dflt=1 and dltd_fl=0)) prod_prd_grp_na
+            FROM mi_tbl_setvo v
+             left outer JOIN prd_dtl d ON d.prd_id = v.data_id AND d.prd_inst_id = v.data_inst_id AND d.dltd_fl = 0
+             join prd p on p.prd_id = v.data_id and p.prd_inst_id =  v.data_inst_id
+            WHERE v.set_id = :setId
+              AND :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+              AND v.data_typ = :type
+              AND v.mkt_id = :mktId
+              AND v.data_subtyp = 101
+              and (data_typ = 3002 or v.cust_stus_generaltab = 1 or v.cust_stus_poskvstab =1 or v.CUST_STUS_CCMTAB = 1 or v.cust_stus_presentationtab = 1
+              or v.cust_stus_smartroutingtab=1 or v.cust_stus_abstab=1 or v.cust_stus_promotionrangetab=1 or v.cust_stus_parameterstab = 1)
+              ]]>
+	</getMenuItemPOSKVSPresentation>
+	
+	<getSmartRoutingTaskDetails>
+	<![CDATA[SELECT SRT.SMRT_RTNG_TASK_ID,SRT.PRD_ID,SRT.PRD_INST_ID,SRT.PRD_SMRT_RTNG_TASK_UK,
+	(SELECT mplc.pkg_gen_cd FROM mw_pkggen_lkup_cd mplc WHERE mplc.entr_cd = ''|| SRT.MSG_KEY||'' AND mplc.lex_id =(SELECT lex_id
+              FROM MKT_LKUP m, LKUP_TYP l WHERE m.mkt_id = :mktId AND m.typ_id = l.TYP_ID AND l.GBL_LEX_ID =90839 AND l.DLTD_FL = 0)) as MSG_KEY,
+	SRT.TASK_TM,SRT.DSPL_TM,
+	(SELECT mplc.pkg_gen_cd FROM mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd = ''||SRT.MNTR||'' and mplc.lex_id =(SELECT lex_id FROM lkup_mstr lm WHERE lm.lkup_na='MONITOR')) as MNTR
+                      FROM MI_TBL_SETVO MTSV JOIN
+                      PRD_SMRT_RTNG_TASK SRT  
+                      ON MTSV.DATA_ID=SRT.PRD_ID 
+    AND MTSV.DATA_INST_ID=SRT.PRD_INST_ID 
+    AND MTSV.DATA_TYP=:type
+    AND MTSV.DATA_SUBTYP=101
+    AND SRT.DLTD_FL=0
+    AND MTSV.MKT_ID=:mktId
+    AND MTSV.SET_ID=:setId
+    AND :effectiveDate BETWEEN MTSV.STRT_DT AND MTSV.END_DT
+    AND (DATA_TYP = 3002 or MTSV.CUST_STUS_SMARTROUTINGTAB=1)]]>
+	</getSmartRoutingTaskDetails>
+
+	<getMenuItemParameterList>
+	 <![CDATA[select
+	parm_id,
+	prd_id,
+	pname,
+	pvalue,
+	lex_id,
+	data_typ
+from
+	(
+	select
+		pcpd.parm_id,
+		v.data_id prd_id,
+		p.xml_newpos_tag pname,
+		(
+		case
+			when p.lex_id is not null then
+              (
+			select
+				mv.pkg_gen_cd
+			from
+				mw_pkggen_lkup_cd mv
+			where
+				mv.lex_id = p.lex_id
+				and mv.entr_cd = coalesce(coalesce(d.parm_val, p.def_val), mscpc.def_val))
+			else
+             coalesce(coalesce(d.parm_val, p.def_val), mscpc.def_val)
+		end) as pvalue,
+		p.lex_id,
+		p.data_typ,
+		pcpd.prd_cls_id
+	from
+		mkt_smi_cusm_parm_cntl mscpc
+	inner join prd_cusm_parm_defn pcpd
+  on
+		mscpc.prd_cusm_parm_id = pcpd.prd_cusm_parm_id
+		and mscpc.mkt_id = :mktId
+		and mscpc.stus = 1
+		and mscpc.dltd_fl = 0
+		and pcpd.dltd_fl = 0
+	inner join parm p
+  on
+		pcpd.parm_id = p.parm_id
+		and p.stus = 1
+		and p.dltd_fl = 0
+	inner join mi_tbl_setvo v
+	on
+		v.set_id = :setId
+		and :effectiveDate between v.strt_dt and v.end_dt
+		and v.data_typ = :type
+		and v.mkt_id = mscpc.mkt_id
+		and v.data_subtyp = 101
+		and (v.data_typ = 3002
+			or v.cust_stus_parameterstab = 1)
+	inner join mi_tbl_setvo vm
+	on
+		vm.set_id in (select set_id from sets where mkt_id = vm.mkt_id and typ = 3002 and dltd_fl = 0)
+		and :effectiveDate between vm.strt_dt and vm.end_dt
+		and vm.data_typ = 3002
+		and vm.data_subtyp = 101
+		and vm.mkt_id = v.mkt_id
+		and vm.data_id = v.data_id
+	inner join prd pd
+	on
+		pd.prd_id = vm.data_id
+		and pd.prd_inst_id = vm.data_inst_id
+		and pd.dltd_fl = 0
+		and pd.prd_clas = pcpd.prd_cls_id
+	left join prd_parm d
+	on
+		d.prd_id = v.data_id
+		and d.prd_inst_id = v.data_inst_id
+		and d.dltd_fl = 0
+		and d.parm_id = p.parm_id) all_params
+where
+	pvalue is not null]]>
+	</getMenuItemParameterList>
+
+	<getProductStatusByMaster><![CDATA[
+			SELECT v.data_id prd_id, COALESCE(d.stus,1) as stus
+	                FROM  sets s
+	                JOIN  mi_tbl_setvo v ON v.set_id = s.set_id AND   :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+	                  AND v.data_typ = 3002
+	                  AND v.data_subtyp = 101
+	left OUTER JOIN mi_tbl_setvo vs ON vs.data_id = v.data_id AND vs.set_id = :setId
+	        AND :effectiveDate BETWEEN vs.strt_dt AND vs.end_dt
+	        AND vs.data_typ = :type
+	        AND vs.data_subtyp = 107
+	left OUTER JOIN 
+	PRD_STUS d ON d.prd_id = vs.data_id AND d.prd_inst_id = vs.data_inst_id  AND d.dltd_fl = 0 
+	WHERE s.mkt_id = :mktId AND s.typ=3002
+
+	]]></getProductStatusByMaster>
+
+
+	<getProductStatusBySet><![CDATA[
+		SELECT v.data_id prd_id, d.stus
+                    FROM  sets s
+                    JOIN  mi_tbl_setvo v ON v.set_id = s.set_id AND   :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+                      AND v.data_typ = 3002
+                      AND v.data_subtyp = 101                      
+                      AND (:type<>3001 OR EXISTS (SELECT 1 FROM mi_tbl_setvo x where x.data_id=v.data_id AND x.data_typ=3001
+                                                          AND x.set_id=:setId AND x.data_subtyp=101 
+                                                          AND :effectiveDate BETWEEN x.strt_dt AND x.end_dt ))
+                    JOIN mi_tbl_setvo vs ON vs.data_id = v.data_id AND vs.set_id = :setId
+                                                        AND :effectiveDate BETWEEN vs.strt_dt AND vs.end_dt
+                                                        AND vs.data_typ = :type
+                                                        AND vs.data_subtyp = 107
+                    JOIN PRD_STUS d ON d.prd_id = vs.data_id AND d.prd_inst_id = vs.data_inst_id  AND d.dltd_fl = 0
+                    WHERE s.mkt_id = :mktId AND s.typ=3002 
+	]]></getProductStatusBySet>
+
+
+	<getProductApprovalStatusByMaster><![CDATA[
+SELECT v.data_id prd_id, d.stus FROM  
+sets s
+JOIN  mi_tbl_setvo v ON v.set_id = s.set_id AND   :effectiveDate  BETWEEN v.strt_dt AND v.end_dt
+AND v.data_typ = 3002
+AND v.data_subtyp = 105
+left OUTER JOIN PRD_APRV_STUS d ON d.prd_id = v.data_id AND d.prd_inst_id = v.data_inst_id  AND d.dltd_fl = 0
+WHERE s.mkt_id = :mktId AND s.typ=3002  order by v.data_id
+]]></getProductApprovalStatusByMaster>
+
+	<getProductApprovalStatusBySet><![CDATA[
+	SELECT v.data_id prd_id, d.stus
+                    FROM  sets s
+                    JOIN  mi_tbl_setvo v ON v.set_id = s.set_id AND   :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+                      AND v.data_typ = 3002
+                      AND v.data_subtyp = 101
+                          AND (:type<>3001 OR EXISTS (SELECT 1 FROM mi_tbl_setvo x where x.data_id=v.data_id AND x.data_typ=3001
+AND x.set_id=:setId AND x.data_subtyp=101 AND :effectiveDate BETWEEN x.strt_dt AND x.end_dt ))
+                    left OUTER JOIN mi_tbl_setvo vs ON vs.data_id = v.data_id AND vs.set_id = :setId
+                                                        AND :effectiveDate BETWEEN vs.strt_dt AND vs.end_dt
+                                                        AND vs.data_typ = :type
+                                                        AND vs.data_subtyp = 105
+                    left OUTER JOIN PRD_APRV_STUS d ON d.prd_id = vs.data_id AND d.prd_inst_id = vs.data_inst_id  AND d.dltd_fl = 0
+                    WHERE s.mkt_id = :mktId AND s.typ=3002 
+	]]></getProductApprovalStatusBySet>
+
+	<getRoutingSets>
+	<![CDATA[	SELECT RTE_ID, ds,
+        pmi_grp_id,
+        prod_rtng_set,
+        psntn_rtng_set      FROM
+        (SELECT DISTINCT RTNG_SETS.PROD_RTNG_SET,
+          RTNG_SETS.PSNTN_RTNG_SET,
+          pmi_grp.pmi_grp_id, pmi_grp.ds,
+          rte_id FROM PMI_GRP,
+          RTNG_PKG,
+          (SELECT DISTINCT R.PROD_RTNG_SET,
+            R.PSNTN_RTNG_SET FROM REST R
+          WHERE R.STATUS = 1
+          AND R.MKT_ID   = :mkt_id
+		  AND R.REST_ID = :rest_id
+          AND R.REST_INST_ID = :rest_int_id
+          AND R.DLTD_FL  = 0
+          ) RTNG_SETS
+        WHERE PMI_GRP.PMI_GRP_ID  = RTNG_PKG.PMIG_ID
+        AND RTNG_PKG_TYP          = 'PRODUCT_DB'
+        AND RTNG_PKG_TABLE_TYP    = 'KVS_ROUTE'
+        AND rtng_pkg.dltd_fl      = 0
+        AND pmi_grp.dltd_fl       = 0
+        AND rtng_pkg.rtng_set_id ::varchar IN( rtng_sets.prod_rtng_set, rtng_sets.psntn_rtng_set)
+        AND rtng_pkg.mkt_id       = pmi_grp.mkt_id
+        AND pmi_grp.mkt_id        = :mkt_id
+		) AS RTNG_VALUES
+		GROUP BY RTE_ID, pmi_grp_id, ds,
+        PROD_RTNG_SET,
+        psntn_rtng_set]]>
+	</getRoutingSets>
+
+	<getGeneralSettingMenuNamesDetails>
+	<![CDATA[SELECT PN.PRD_ID,MTSV.SET_ID,MTSV.DATA_TYP,PN.LANG_ID,PN.PRD_DVC_NA,SHRT_NA,LNG_NA,DRV_NA,CSO_NA,COD_NA,CSO_SIZE_NA, 
+		CSO_GEN_NA,ALT_NA,SHRT_MNIT_NA,SUMR_MNIT_NA,
+    PRMO_TX_LABL,HOME_DELIVERY_NA, PD.SMRT_RMDR FROM MI_TBL_SETVO MTSV 
+    JOIN PRD_NA PN ON PN.PRD_ID=MTSV.DATA_ID AND PN.PRD_INST_ID=MTSV.DATA_INST_ID AND PN.DLTD_FL=0
+    LEFT OUTER JOIN PRD_DTL PD ON PD.PRD_ID=MTSV.DATA_ID AND PD.PRD_INST_ID=MTSV.DATA_INST_ID AND PD.DLTD_FL=0
+    WHERE MTSV.SET_ID=:setId 
+    AND :effectiveDate BETWEEN MTSV.STRT_DT AND MTSV.END_DT
+    AND MTSV.DATA_TYP =:type
+    AND MTSV.MKT_ID=:mktId
+    AND MTSV.DATA_SUBTYP=101
+    AND (MTSV.CUST_STUS_GENERALTAB=1 OR DATA_TYP=3002) ]]>
+	</getGeneralSettingMenuNamesDetails>
+	
+	<getProductComponentsDetails>
+		<![CDATA[
+		select pc.prd_id,mtsv.set_id,
+    pc.prd_inst_id,
+    pc.chld_prd_id,
+    pc.seq,
+    pc.prd_subtyp,
+    pc.cpsn_typ,
+    pc.dspl_ord,
+    pc.eatin_prc,
+    pc.tkut_prc,
+    pc.oth_prc,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.price_calc_mode ELSE null END price_calc_mode,
+   COALESCE(pc.def_qt,0) def_qt,
+    pc.max_qt,
+   COALESCE(pc.min_qt,0) min_qt,
+    COALESCE(pc.rfnd_thsh,0) rfnd_thsh,
+    pc.chrg_thsh,
+    (SELECT CASE WHEN pc.cost_inclsv = '1' THEN 'true' WHEN pc.cost_inclsv = '0' THEN 'false' ELSE NULL END) as cost_inclsv,
+    pc.disp_cso,
+    COALESCE( (select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd = ''|| pc.frc_comp_dspl ||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='FORCE_COMPOSITION_DISPLAY')),'OFF')
+     as frc_comp_dspl,
+     (SELECT CASE WHEN pc.plain_grll = '1' THEN 'true' WHEN pc.plain_grll = '0' THEN 'false' ELSE 'false' END) as plain_grll,		 
+	 (SELECT CASE WHEN pc.smrt_grll = '1' THEN 'true' WHEN pc.smrt_grll = '0' THEN 'false' ELSE 'false' END) as smrt_grll,
+    pc.rfr_prd_id,
+    pc.def_prd_id,
+    pc.def_choice_prd_id,
+    pc.def_choice_chn,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.flex_choice ELSE null END flex_choice,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.ccm_anchor ELSE null END ccm_anchor,
+    pc.price_reduct_rate,
+    pc.ccm_anchor,
+    pc.non_required_choices,
+    (SELECT CASE WHEN  pc.set_parent_product_outage = '1' THEN 'true' WHEN  pc.set_parent_product_outage = '0' THEN 'false' ELSE 'false' END) as set_parent_product_outage,
+    pc.impacted_mi_on_rtm,
+    pc.substitute_on_rtm,
+    2 as prd_clas , 2 as auto_cmdt, pc.dltd_fl
+FROM
+    mi_tbl_setvo mtsv
+    JOIN prd_cpsn pc ON pc.prd_id = mtsv.data_id AND pc.prd_inst_id = mtsv.data_inst_id and mtsv.data_typ<>3002
+WHERE
+    mtsv.set_id = :setId
+    AND :effectiveDate BETWEEN mtsv.strt_dt AND mtsv.end_dt
+     AND mtsv.data_typ = :type and (mtsv.data_typ<>3001 OR (mtsv.data_typ = 3001 AND pc.cust_stus=1))
+    AND mtsv.data_subtyp = 101
+    AND mtsv.mkt_id = :mktId 
+    
+    ]]>
+</getProductComponentsDetails>
+
+<getProductComponentsDetailsMaster>
+		<![CDATA[
+		select pc.prd_id,mtsv.set_id,
+    pc.prd_inst_id,
+    pc.chld_prd_id,
+    pc.seq,
+    pc.prd_subtyp,
+    pc.cpsn_typ,
+    pc.dspl_ord,
+    pc.eatin_prc,
+    pc.tkut_prc,
+    pc.oth_prc,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.price_calc_mode ELSE null END price_calc_mode,
+   COALESCE(pc.def_qt,0) def_qt,
+    pc.max_qt,
+   COALESCE(pc.min_qt,0) min_qt,
+    COALESCE(pc.rfnd_thsh,0) rfnd_thsh,
+    pc.chrg_thsh,
+    (SELECT CASE WHEN pc.cost_inclsv = '1' THEN 'true' WHEN pc.cost_inclsv = '0' THEN 'false' ELSE NULL END) as cost_inclsv,
+    pc.disp_cso,
+    COALESCE((select mplc.pkg_gen_cd from mw_pkggen_lkup_cd mplc 
+				where mplc.entr_cd = ''|| pc.frc_comp_dspl ||'' and mplc.lex_id =(select lex_id from lkup_mstr lm where lm.lkup_na='FORCE_COMPOSITION_DISPLAY')),'OFF')
+     as frc_comp_dspl,
+     (SELECT CASE WHEN pc.plain_grll = '1' THEN 'true' WHEN pc.plain_grll = '0' THEN 'false' ELSE 'false' END) as plain_grll,		 
+	 (SELECT CASE WHEN pc.smrt_grll = '1' THEN 'true' WHEN pc.smrt_grll = '0' THEN 'false' ELSE 'false' END) as smrt_grll,
+    pc.rfr_prd_id,
+    pc.def_prd_id,
+    pc.def_choice_prd_id,
+    pc.def_choice_chn,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.flex_choice ELSE null END flex_choice,
+    CASE WHEN pc.cpsn_typ = 1 THEN pc.ccm_anchor ELSE null END ccm_anchor,
+    pc.price_reduct_rate,
+    pc.ccm_anchor,
+    pc.non_required_choices,
+    (SELECT CASE WHEN  pc.set_parent_product_outage = '1' THEN 'true' WHEN  pc.set_parent_product_outage = '0' THEN 'false' ELSE 'false' END) as set_parent_product_outage,
+    pc.impacted_mi_on_rtm,
+    pc.substitute_on_rtm,
+    2 as prd_clas , 2 as auto_cmdt, pc.dltd_fl
+FROM
+    mi_tbl_setvo mtsv
+    JOIN prd_cpsn pc ON pc.prd_id = mtsv.data_id AND pc.prd_inst_id = mtsv.data_inst_id and pc.dltd_fl=0 and mtsv.data_typ=3002
+WHERE
+    mtsv.set_id = :setId
+    AND :effectiveDate BETWEEN mtsv.strt_dt AND mtsv.end_dt
+     AND mtsv.data_typ = :type 
+    AND mtsv.data_subtyp = 101
+    AND mtsv.mkt_id = :mktId 
+    
+    ]]>
+
+	</getProductComponentsDetailsMaster>
+	
+
+
+	<getMenuItemPromotionRange>	
+<![CDATA[
+	SELECT b.*
+FROM mi_tbl_setvo a
+JOIN prd_prmo_range b ON a.DATA_ID = b.PRD_ID AND b.prd_inst_id = a.data_inst_id  AND b.dltd_fl = 0
+WHERE a.set_id = :setId
+    AND a.mkt_id = :mktId
+    AND :effectiveDate BETWEEN a.strt_dt AND a.end_dt
+    AND a.data_typ = :type
+    AND a.data_subtyp = 101
+    AND (data_typ = 3002 or a.cust_stus_promotionrangetab =1)]]></getMenuItemPromotionRange>
+
+
+	<getPricingValuesBysetId>
+        <![CDATA[   select PRD_ID,EATIN_PRC, EATIN_TAX_CD, EATIN_TAX_RULE, EATIN_TAX_ENTR,
+       TKUT_PRC, TKUT_TAX_CD, TKUT_TAX_RULE, TKUT_TAX_ENTR ,
+       OTH_PRC, OTH_TAX_CD, OTH_TAX_RULE, OTH_TAX_ENTR from prd_prc_data ppd where
+       ppd.MKT_ID = :mktId AND 
+       :effectiveDate BETWEEN ppd.strt_dt AND ppd.end_dt AND
+       ppd.SET_ID = :retrievedsetId AND DLTD_FL = 0 ]]>
+	</getPricingValuesBysetId>
+
+	<getTaxEntry>
+        <![CDATA[   SELECT 
+        s.set_id,
+        s.typ,
+        tt.tax_typ_code
+      FROM SETS s,
+        dset d,
+        tax_typ tt
+      WHERE s.set_id = d.set_id
+      AND tt.tax_id  = s.set_id
+      AND d.dset_id  = tt.dset_id
+      AND s.mkt_id   = d.mkt_id
+      AND s.typ      = 4005
+      AND d.mkt_id   = tt.mkt_id
+      AND s.dltd_fl  = 0
+      AND d.dltd_fl  = 0
+      AND d.mkt_id   = :vmarketid
+      AND tt.mkt_id  = :vmarketid
+      AND tt.dltd_fl = 0
+      
+    UNION ALL
+      SELECT DISTINCT 
+        s.set_id,
+        s.typ,
+        tc.tax_chn_cd
+      FROM SETS s,
+        tax_chn tc
+      WHERE tc.set_id = s.set_id
+      AND s.typ       = 4006
+      AND s.dltd_fl   = 0
+      AND tc.mkt_id   = :vmarketid
+      AND tc.dltd_fl  = 0
+     ]]>
+	</getTaxEntry>
+	<retrieveRestaurantMIList>
+        <![CDATA[
+        select distinct data_id from mi_tbl_setvo where set_id in 
+			(:setsId) and  :effectiveDate between strt_dt and end_dt
+			and mkt_id = :marketId and data_typ = 3001 and data_subtyp = 101		
+	]]>
+	</retrieveRestaurantMIList>
+	
+	<getProductShortcutsMarketData>
+	 <![CDATA[
+	 SELECT
+        MAX(s.set_id) set_id,
+        MAX(s.shrtcut_kiosk_id) shrtcut_kiosk_id,
+        MAX(s.description) description,
+        STRING_AGG(sc.prd_id::varchar
+                || ':'
+                || sc.quantity::varchar
+                || ':'
+                || sc.cpsn_typ::varchar
+                || ':'
+                || sc.light::varchar, ','
+            ORDER BY
+                sc.shrtcut_kiosk_id
+        ) cfg
+    FROM
+        shrtcut_kiosk s
+        JOIN shrtcut_kiosk_cpsn sc ON s.shrtcut_kiosk_id = sc.shrtcut_kiosk_id
+                                      AND s.set_id = sc.set_id
+    WHERE
+        s.dltd_fl = 0
+        AND sc.dltd_fl = 0
+        AND s.mkt_id = :mktId
+    GROUP BY
+        s.set_id,
+        s.shrtcut_kiosk_id
+	  ]]>
+	</getProductShortcutsMarketData>
+	
+	<getProductShortcutSettingsByRest>
+	 <![CDATA[
+    SELECT
+        ps.prd_id             prd_id,
+        ps.shrtcut_kiosk_id   shrtcut_kiosk_id
+    FROM
+        mi_tbl_setvo     mtsv
+        JOIN prd_shrt_kiosk   ps ON mtsv.data_id = ps.prd_id
+                                  AND mtsv.data_inst_id = ps.prd_inst_id
+                                  AND mtsv.typ = :type
+                                  AND mtsv.data_subtyp = 101
+                                  AND :effectiveDate BETWEEN mtsv.strt_dt AND mtsv.end_dt
+                                  AND mtsv.set_id = :setId
+    WHERE
+        mtsv.mkt_id = :mktId
+        AND ps.dltd_fl = 0
+	 ]]>
+	</getProductShortcutSettingsByRest>
+	
+	<getPriceValuesWithTax>
+	<![CDATA[   select * from prd_prc_data ppd 
+       join prd_tax pt on ppd.prd_id = pt.prd_id and ppd.set_id = pt.set_id and pt.dltd_fl = 0
+       where ppd.prd_id = :prdId 
+       and ppd.mkt_id = :mktId
+       and :effectiveDate BETWEEN ppd.strt_dt AND ppd.end_dt
+       and ppd.SET_ID = :setId]]>
+	</getPriceValuesWithTax>
+	<getMenuItemTaxSetValues>
+	<![CDATA[ select pt.prd_id,
+        pt.eatin_tax_cd, pt.eatin_tax_rule, pt.eatin_tax_entr, pt.eatin_tax_chn_entr,
+        pt.tkut_tax_cd, pt.tkut_tax_rule, pt.tkut_tax_entr, pt.tkut_tax_chn_entr,
+        pt.oth_tax_cd, pt.oth_tax_rule, pt.oth_tax_entr, pt.oth_tax_chn_entr
+      from prd_tax pt
+      where pt.mkt_id = :mktId
+        and :effectiveDate between pt.strt_dt and pt.end_dt
+        and pt.set_id = :setId
+        and pt.dltd_fl = 0]]>
+	</getMenuItemTaxSetValues>
+	<getValuesFromGlobalParam>
+	<![CDATA[ SELECT param_value FROM GLOBAL_PARAM WHERE PARAM_NAME = :paramName AND MKT_ID = :mktId AND dltd_fl = 0]]>
+	</getValuesFromGlobalParam>
+	<getPricingValueFromRest>
+	<![CDATA[  select tax_code_eatin as EATIN_TAX_CD,tax_code_takeout as TKUT_TAX_CD,tax_code_other as OTH_TAX_CD,
+        tax_rule_eatin as EATIN_TAX_RULE,tax_rule_takeout as TKUT_TAX_RULE,tax_rule_other as OTH_TAX_RULE,
+        tax_entry_eatin as EATIN_TAX_ENTR, tax_entry_takeout as TKUT_TAX_ENTR,tax_entry_other as OTH_TAX_ENTR,tax_chn_entry_eatin as TAX_CHN_ENTRY_EATIN,
+        tax_chn_entry_takeout as TAX_CHN_ENTRY_TAKEOUT,tax_chn_entry_other as TAX_CHN_ENTRY_OTHER
+        from rest r2 where 
+        node_id = :nodeId
+       and mkt_id = :mktId]]>
+	</getPricingValueFromRest>
+        <getDataForDisplayBRD>
+	<![CDATA[select pt.* from  PRD_PRC_CPSN_DATA pt, prd_prc_data ppd
+where pt.set_id = :setId and 
+pt.prd_id = ppd.prd_id and pt.set_id = ppd.set_id and pt.strt_dt = ppd.strt_dt
+and :effectiveDate BETWEEN ppd.strt_dt AND ppd.end_dt]]>
+	</getDataForDisplayBRD>     
+	 
+	<getAssociatedCategories>
+	<![CDATA[
+    SELECT  d.SIZE_FL size_fl, a.prd_id, c.cat_cd
+                    FROM cat_assc_prd a 
+                    JOIN mi_tbl_setvo v ON v.set_id = :setId
+                          AND :effectiveDate BETWEEN v.strt_dt AND v.end_dt
+                          AND v.data_typ = :type
+                          AND v.data_subtyp = 101
+                          AND v.data_id = a.prd_id
+                    JOIN prd_cat c on c.cat_id = a.cat_id  AND :effectiveDate BETWEEN C.STRT_DT AND C.END_DT and c.dltd_fl=0
+                    JOIN PRD_CUST_CATEG d ON d.prd_id = v.data_id AND d.prd_inst_id = v.data_inst_id  AND d.dltd_fl = 0 AND d.cat_cd = c.cat_cd  
+                   WHERE a.DLTD_FL = 0 AND  :effectiveDate BETWEEN A.strt_dt AND A.end_dt
+    ]]>
+	</getAssociatedCategories>
+	
+	
+	<getAssociatedPromoProducts>
+	<![CDATA[SELECT  p.PRMO_ASSC_ID,
+		p.PRMO_PRD_ID,
+		p.PRD_INST_ID,
+		p.PRMO_TYP,
+		p.PRRT,
+        p.prd_id
+FROM mi_tbl_setvo mtsv
+JOIN prd_prmo_assc p ON mtsv.data_id = p.prd_id
+AND mtsv.data_inst_id = p.prd_inst_id
+AND mtsv.typ = :type
+AND mtsv.data_subtyp = 101
+AND :effectiveDate BETWEEN mtsv.strt_dt AND mtsv.end_dt
+WHERE mtsv.set_id = :setId
+AND p.dltd_fl = 0
+AND mtsv.mkt_id = :mktId
+and (mtsv.typ = 3002 or mtsv.cust_stus_promotionassoctab = 1)
+   
+    ]]>
+	</getAssociatedPromoProducts>
+
+	<getMenuItemTag>
+        <![CDATA[
+		WITH tag_data AS (
+    SELECT
+        newpos_name,
+        t.tag_id,
+        t.market_id,
+        coalesce(t.status,(
+            SELECT
+                status
+            FROM
+                tag s
+            WHERE
+                s.description = t.description
+                AND s.display_name = t.display_name
+                AND s.market_id = 0
+                AND s.dltd_fl = 0
+        )) status,
+        dltd_fl
+    FROM
+        tag t
+    WHERE
+        t.dltd_fl = 0
+	)
+	SELECT
+	    t.newpos_name,
+	    pt.tag_id,
+	    pt.prd_id,
+	    t.status
+	FROM
+	    tag_data       t
+	    JOIN prd_tag        pt ON t.tag_id = pt.tag_id
+	                       AND t.market_id = :mktId
+	                       AND pt.dltd_fl = 0
+	    JOIN mi_tbl_setvo   svo ON svo.data_id = pt.prd_id
+	                             AND :effectiveDate BETWEEN svo.strt_dt AND svo.end_dt
+                             AND svo.data_typ = :type
+                             AND svo.data_subtyp = 101
+                             AND pt.prd_inst_id = svo.data_inst_id
+                             AND svo.mkt_id = :mktId
+                             AND svo.set_id = :setId
+                             AND ( svo.data_typ = 3002
+                                   OR svo.cust_stus_tag_tab = 1 )
+      	                   ]]>
+       </getMenuItemTag> 
+        <getDiscountBreakT>
+        <![CDATA[
+        SELECT  distinct PD.PRD_ID, PD.PRD_INST_ID, pd.DISC_ID disc_disabled, d.DISC_ID disc_enabled
+    FROM PRD_DISC PD,DISC D, rest_data r, sets  s
+    WHERE PD.DISC_ID = D.DISC_ROW_ID
+    AND D.DISC_ID IS NOT NULL
+    AND PD.MKT_ID  = :vmarketid
+    AND D.MKT_ID =:vmarketid
+    AND PD.DLTD_FL = 0
+    and s.set_id = d.set_id
+    and s.typ = 4009
+    AND r.rest_id =  :rest_id
+    AND r.rest_inst_id =  :rest_int_id
+    AND r.asn_set_typ = 6013
+    ORDER BY pd.DISC_ID ASC
+	]]>
+		</getDiscountBreakT>
+		<getDiscountBreakF>
+        <![CDATA[
+        SELECT  distinct PD.PRD_ID, PD.PRD_INST_ID, pd.DISC_ID disc_disabled, d.DISC_ID disc_enabled
+    FROM PRD_DISC PD,DISC D, rest_data r
+    WHERE PD.DISC_ID = D.DISC_ROW_ID
+    AND D.DISC_ID IS NOT NULL
+    AND PD.MKT_ID  = :vmarketid
+    AND D.MKT_ID =:vmarketid
+    AND PD.DLTD_FL = 0
+    AND  set_id = cusm_set_id
+    AND r.rest_id =  :rest_id
+    AND r.rest_inst_id =  :rest_int_id
+    AND r.asn_set_typ = 6013
+    ORDER BY pd.DISC_ID ASC
+	]]>
+		</getDiscountBreakF>
+		
+		<getAllColorsList>
+        <![CDATA[
+        SELECT colr_id,RL.lcle_id,
+			COALESCE(RL.TRNSLTD_VAL,GL.TRNSLTD_VAL) colr_na
+		FROM
+		  (SELECT * FROM COLR WHERE MKT_ID IN (0, :marketid) AND DLTD_FL = 0) COLR
+		INNER JOIN MKT_LCL MKT ON MKT.MKT_ID = :marketid
+			AND MKT.DLTD_FL = 0
+		INNER JOIN MKT_LCL GLB ON GLB.MKT_ID = 0
+			AND GLB.DLTD_FL = 0
+			AND GLB.DFLT = 1
+		LEFT OUTER JOIN LCLZ RL ON RL.LEX_ID = COLR.COLR_ID
+			AND RL.LCLE_ID = MKT.LCLE_ID
+		LEFT OUTER JOIN LCLZ GL ON GL.LEX_ID   = COLR.COLR_ID
+			AND GL.LCLE_ID = GLB.LCLE_ID		
+	]]>
+	</getAllColorsList>
+	
+	
+	<getAllMediaList>
+        <![CDATA[
+        select lgl_id,mdia_id, mdia_file_na from rfm_mdia
+		WHERE DLTD_FL		= 0
+			AND MDIA_STUS	= 1
+			AND MKT_ID		= :marketid	order by mdia_id desc
+	]]>
+	</getAllMediaList>
+	<getProductID>
+	 <![CDATA[ select prd_id from prd p2 where p2.prd_cd = :prdCode and p2.mkt_id = :mktId and p2.dltd_fl =0 limit 1 ]]>
+	</getProductID>
+	<getTaxValuesForSetId>
+	<![CDATA[
+		select ss.subs_grp_id, ss.prd_id , ss.prd_cd  ,ss.subs_na_id , ppd.prd_tax_id , 
+ppd.eatin_tax_cd , ppd.eatin_tax_rule , ppd.eatin_tax_entr , ppd.eatin_tax_chn_entr , ppd.tkut_tax_cd ,
+ppd.tkut_tax_rule , ppd.tkut_tax_entr , ppd.tkut_tax_chn_entr , ppd.oth_tax_cd , ppd.oth_tax_rule , ppd.oth_tax_entr ,
+ppd.oth_tax_chn_entr  from subs_stng ss 
+	left outer join prd_tax ppd on
+	ppd.prd_id  = ss.prd_id and
+	ss.mkt_id = ppd.mkt_id and
+	ppd.set_id = :setId  and ppd.mkt_id = ss.mkt_id
+	and :effDate BETWEEN ppd.strt_dt AND ppd.end_dt 
+	where ss.dltd_fl =0 and ss.mkt_id=:mktId 
+	]]>
+	</getTaxValuesForSetId>
+	
+	<getgrillGroupName>
+        <![CDATA[
+        SELECT grll_grp_id, grll_grp_na
+      FROM GRLL_GRP
+      WHERE dltd_fl       = 0
+	]]>
+	</getgrillGroupName>
+	
+	<getLimitedTimeDiscountVal>
+        <![CDATA[
+       select coalesce(PLTD.LMT_TM_DISC_STUS_ID,0) from mi_tbl_setvo mts, PRD_LMT_TM_DISC_STUS PLTD 
+where mts.data_subtyp = 109 and :date between mts.strt_dt and mts.end_dt 
+and mts.crtr_node_id = :nodeId
+and mts.data_typ = 3003
+and PLTD.prd_inst_id = mts.data_inst_id	
+and PLTD.prd_id = mts.data_id
+	]]>
+	</getLimitedTimeDiscountVal>
+	
+	<getDrinkVolList>
+        <![CDATA[
+        SELECT *
+		FROM DRNK_VOL 
+		WHERE DLTD_FL = 0
+		AND MKT_ID = :mktId
+	]]>
+	</getDrinkVolList>
+	
+	<getCytGroupDisplayOrder>
+	<![CDATA[   select * from prd_ingr_seq igs join mi_tbl_setvo mts 
+   		on igs.prd_inst_id = mts.data_inst_id  
+   		and mts.data_id = igs.prd_id 
+ 		join INGR_GRP ig on
+        igs.ingr_id = ig.ingr_grp_id 
+        and ig.set_id = (select set_id from sets where TYP  = 3023 and mstr=1 and mkt_id = :mkt_id and dltd_fl=0)
+	    and ig.dltd_fl=0
+        and igs.dltd_fl = 0 
+        and :effDate BETWEEN mts.STRT_DT AND mts.END_DT
+	    order by INGR_SEQ]]>
+	</getCytGroupDisplayOrder>
+	
+		<getTranslatedValuesForDefaultChoice>
+	 <![CDATA[select * from 
+            (SELECT B.ENTR_ORD, B.ENTR_CD , C.TRNSLTD_VAL, B.ENTR_VAL FROM
+			LKUP_ENTR B, LKUP_NA A , LCLZ C WHERE A.LKUP_NA_ID=B.LKUP_NA_ID
+			AND A.LEX_ID in (select LEX_ID from LEX where srce_wd = :defChoiceChn)
+            AND B.DLTD_FL = 0 AND B.STUS = 1 AND C.LEX_ID = B.ENTR_VAL 
+			AND C.LCLE_ID = 1) temp]]>
+	</getTranslatedValuesForDefaultChoice>
+	
+	<getSmrtRemindrGroupName>
+        <![CDATA[
+        SELECT srg_na
+      FROM SRG
+      WHERE srg_id = :smrtrmdr
+      AND dltd_fl       = 0
+	]]>
+	</getSmrtRemindrGroupName>
+	
+	 <getMarketName>
+        <![CDATA[
+     SELECT MKT_NA FROM MKT_DATA WHERE MKT_ID = :marketId and dltd_fl=0
+      ]]>
+    </getMarketName>
+</queries>

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<queries name="Queries">
+    <retrieveMenuItemSetsId>
+        <![CDATA[SELECT b.chld_set_id
+			 FROM
+			 (SELECT r.node_id,
+				  (SELECT RD.PREN_SET_ID
+							FROM TBL_SETVO S, REST_DATA RD
+							WHERE S.DATA_TYP=6008
+							AND S.CRTR_NODE_ID =  r.node_id
+							and :effectiveDate BETWEEN s.strt_dt AND s.end_dt
+							AND RD.DLTD_FL = 0
+							AND RD.REST_ID = S.DATA_ID
+							AND rd.rest_inst_id = S.DATA_inst_id
+							AND s.mkt_id = RD.mkt_id
+							AND RD.mkt_id = :marketId
+							AND RD.ASN_SET_TYP = 60083001) pren_set
+			FROM rest r,tbl_setvo ts
+			WHERE r.dltd_fl = 0
+			AND ts.data_id = r.rest_id
+			AND ts.data_inst_id = r.rest_inst_id
+			AND ts.mkt_id = r.mkt_id
+			AND r.mkt_id = :marketId
+			AND :effectiveDate BETWEEN   ts.strt_dt   AND   ts.end_dt
+			AND r.node_id = :nodeId) a
+			JOIN SET_LAYR b ON  b.PREN_SET_ID = a.pren_set AND b.dltd_fl = 0
+			ORDER BY inhr_ord desc]]>
+    </retrieveMenuItemSetsId>
+
+    <retrieveMasterSetId>
+        <![CDATA[SELECT set_id
+             FROM sets
+             WHERE mkt_id = :marketId
+             	AND dltd_fl = 0
+                AND typ = 3002]]>
+    </retrieveMasterSetId>
+
+    <retrieveRestSetId>
+        <![CDATA[SELECT set_id
+             FROM sets
+             WHERE crtr_node_id = :nodeId
+             	AND mkt_id = :marketId
+             	AND dltd_fl = 0
+             	AND typ = 3003]]>
+    </retrieveRestSetId>
+ <retrieveRestaurantSetsId>
+        <![CDATA[SELECT b.chld_set_id
+			 FROM
+			 (SELECT r.node_id,
+				  (SELECT RD.PREN_SET_ID
+							FROM TBL_SETVO S, REST_DATA RD
+							WHERE S.DATA_TYP=6008
+							AND S.CRTR_NODE_ID =  r.node_id
+							and :effectiveDate BETWEEN s.strt_dt AND s.end_dt
+							AND RD.DLTD_FL = 0
+							AND RD.REST_ID = S.DATA_ID
+							AND rd.rest_inst_id = S.DATA_inst_id
+							AND s.mkt_id = RD.mkt_id
+							AND RD.mkt_id = :marketId
+							AND RD.ASN_SET_TYP = :setType) pren_set
+			FROM rest r,tbl_setvo ts
+			WHERE r.dltd_fl = 0 and r.node_id=:nodeId
+			AND ts.data_id = r.rest_id
+			AND ts.data_inst_id = r.rest_inst_id
+			AND ts.mkt_id = r.mkt_id
+			AND r.mkt_id = :marketId
+			AND :effectiveDate BETWEEN   ts.strt_dt   AND   ts.end_dt
+			AND r.node_id = :nodeId) a
+			JOIN SET_LAYR b ON  b.PREN_SET_ID = a.pren_set AND b.dltd_fl = 0
+			ORDER BY inhr_ord desc]]>
+    </retrieveRestaurantSetsId>
+    	<retrieveMarketMenuItemDualStatus>
+        <![CDATA[
+        	select PARAM_VALUE from global_param where param_name='MENU_ITEM_DEFAULT_MENU_ITEM_APPROVAL_STATUS' and mkt_id=:marketId
+        ]]>
+    </retrieveMarketMenuItemDualStatus>
+</queries>

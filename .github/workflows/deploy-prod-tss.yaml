@@ -1,0 +1,207 @@
+# Github action to build docker image and helm chart and push to AWS ECR for push to Master/Main branch
+# Image and chart will be tagged with the commit id to allow a user to find the image
+name: Deploy Prod TSS
+# Controls when action will run
+on:
+  push:
+    branches:
+      - release
+      
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'    
+        required: true
+        default: 'warning'
+  
+jobs:
+  build-prod-tss:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version-bump.outputs.VERSION_TAG }}-prod-tss
+    environment:
+      name: prod
+    env:
+      HELM_EXPERIMENTAL_OCI: 1
+      DOCKERFILE_PATH: docker/prod/tss/prod/Dockerfile
+    steps:
+      # Checkout sourcecode
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+        # Cache Maven
+      - name: Cache Maven Packages
+        uses: actions/cache@v1
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven
+
+        # Set up Java 11
+      - name: Set up JDK 1.11
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.11
+      
+      - name: Find tag
+        id: version-tag
+        uses: jimschubert/query-tag-action@v2
+        with:
+          include: 'RFM*' # 22.1.1
+
+      - name: Show Tag
+        id: display
+        run: |
+          echo 'Output from Find Tag: ${{steps.version-tag.outputs.tag}}'
+
+      - name: Make executeable Bump Version
+        run: chmod +x scripts/versionbump.sh
+
+      - name: Bump Version
+        id: version-bump
+        run: |
+          latestVersionTag=${{steps.version-tag.outputs.tag}}
+          scripts/versionbump.sh "${latestVersionTag}"
+        shell: bash
+
+      # see: https://github.com/aws-actions/configure-aws-credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.RFM2_AWS_GITHUB_329604744732_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.RFM2_AWS_GITHUB_329604744732_PROD_SECRET_KEY }}
+          aws-region: us-east-1
+          role-to-assume: RFM2_AWS_GITHUB_329604744732_PROD_ROLE
+          role-skip-session-tagging: true
+          role-duration-seconds: 1200
+
+      # Install Helm
+      - name: Helm tool installer
+        uses: azure/setup-helm@v1
+        with:
+          version: '3.6.3'
+        id: install
+
+      # see: https://github.com/aws-actions/amazon-ecr-login
+      - name: Log in to Amazon ECR Prod
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # tag prod images with commit and ref and push both to ECR
+      - name: Build, tag, and push docker images to Amazon ECR Prod
+        env:
+          ECR_REPOSITORY: ${{ secrets.RFM2_DOCKER_REPO_PROD_TSS }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG_COMMIT: ${{ github.sha }}
+          IMAGE_TAG_RELEASE: ${{ steps.version-bump.outputs.VERSION_TAG }}-prod-tss
+        run: |
+          mvn clean install -Dmaven.test.skip=true
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG_COMMIT -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG_RELEASE -f $DOCKERFILE_PATH .
+          docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+
+      # Save and push the helm chart to ECR
+      - name: Package and push helm chart to Amazon ECR Prod
+        working-directory: src/helm
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          HELM_ECR_REPOSITORY: ${{ secrets.RFM2_HELM_STABLE_REPO_PROD_TSS }}
+          HELM_CHART_TAG: ${{ steps.version-bump.outputs.VERSION_TAG }}-prod-tss
+        run: |
+          aws ecr get-login-password --region us-east-1 | helm registry login --username AWS --password-stdin $ECR_REGISTRY
+          helm chart save . $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+          helm chart push $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+
+      - name: Log out of Amazon ECR
+        if: always()
+        run: docker logout ${{ steps.login-ecr.outputs.registry }}
+
+         # Publish the tag before create release notes
+      - name: Publish Tag
+        uses: actions-ecosystem/action-push-tag@v1
+        with:
+          tag: ${{ steps.version-bump.outputs.VERSION_TAG }}-prod-tss
+
+        # Create release notes after the tag is pushed so that it can get the range difference
+      - name: Create Release Notes
+        uses: fregante/release-with-changelog@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          exclude: '^Meta'
+          release_name: ${{ steps.version-bump.outputs.VERSION_TAG }}-prod-tss
+          commit-template: '- {title} ← {hash}'
+          template: |
+            ### What's Changed
+
+            {commits}
+
+            Full Changelog: {range}
+
+  deploy-prod-tss:
+    # The type of runner that the job will run on
+    runs-on: [self-hosted, rfm2, tss-prod]
+    needs: build-prod-tss
+    environment:
+      name: prod
+    env:
+      HELM_EXPERIMENTAL_OCI: 1
+      ECR_REGISTRY: 329604744732.dkr.ecr.us-east-1.amazonaws.com
+      ECR_REPOSITORY: ${{ secrets.RFM2_DOCKER_REPO_PROD_TSS }}
+      HELM_CHART_TAG: ${{ needs.build-prod-tss.outputs.version }}
+    steps:
+      # Checkout sourcecode
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      # see: https://github.com/aws-actions/configure-aws-credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.RFM2_AWS_GITHUB_329604744732_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.RFM2_AWS_GITHUB_329604744732_PROD_SECRET_KEY }}
+          aws-region: us-east-1
+          role-to-assume: RFM2_AWS_GITHUB_329604744732_PROD_ROLE
+          role-skip-session-tagging: true
+          role-duration-seconds: 1200
+
+      - name: Login to EKS
+        run: |
+          cluster_name="$(aws eks list-clusters --region us-east-1 --query 'clusters[]' --output text \
+          | tr '\t' '\n' | grep "${CLUSTER_PREFIX}")"
+          aws eks \
+          --region us-east-1 \
+          update-kubeconfig --name "${cluster_name}" \
+          --role-arn="${CLUSTER_ROLE_ARN}"
+        env:
+          CLUSTER_PREFIX: eks-mcd-rfm-tss-prod
+          CLUSTER_ROLE_ARN: arn:aws:iam::329604744732:role/RFM2_AWS_GITHUB_329604744732_PROD_ROLE
+
+      # Install Helm
+      - name: Helm tool installer
+        uses: azure/setup-helm@v1
+        with:
+          version: '3.6.3'
+        id: install
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password \
+          --region us-east-1 | helm registry login \
+          --username AWS \
+          --password-stdin $ECR_REGISTRY
+
+      - name: Pull and Export Helm Chart
+        run: |
+          helm chart pull $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+          helm chart export $ECR_REGISTRY/$HELM_ECR_REPOSITORY:$HELM_CHART_TAG
+        env:
+          HELM_ECR_REPOSITORY: ${{ secrets.RFM2_HELM_STABLE_REPO_PROD_TSS }}
+
+      - name: Deploy PKG GEN SVC Helm Charts - Prod #--atomic
+        run: helm upgrade --install --wait --timeout 600s --create-namespace --debug -f $CHART_PATH/values.yaml -n $EKS_NAMESPACE --set $HELM_VALUES $CHART_PATH ./$CHART_PATH
+        env:
+          EKS_NAMESPACE: pkg-gen-svc-tss-prod
+          HELM_VALUES: packageGenerationService.image.repository=329604744732.dkr.ecr.us-east-1.amazonaws.com/rfm2-menu-package-generation-service-prod-tss,packageGenerationService.image.tag=${{ needs.build-prod-tss.outputs.version }},packageGenerationService.image.repository=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }},packageGenerationService.env=tss-prod,global.namespace=pkg-gen-svc-tss-prod,packageGenerationService.market=US,packageGenerationService.activeProfile=tss-prod,packageGenerationService.logLevel=INFO         
+          CHART_PATH: package-generation-service
+  
